@@ -375,13 +375,27 @@ export default {
       });
     }
 
-    // Admin-ish seed endpoint for the owned index MVP.
+    // Admin-ish seed/upsert — requires INDEX_ADMIN_KEY via X-Omni-Index-Key.
     if (path === "/v1/index/seed" && request.method === "POST") {
+      if (!env.INDEX_ADMIN_KEY) {
+        return json({ error: "Index admin disabled" }, 403);
+      }
+      const key = request.headers.get("X-Omni-Index-Key") || "";
+      if (key !== env.INDEX_ADMIN_KEY) {
+        return json({ error: "Unauthorized" }, 401);
+      }
       const count = await seedStarterCorpus(env);
       return json({ ok: true, seeded: count });
     }
 
     if (path === "/v1/index/upsert" && request.method === "POST") {
+      if (!env.INDEX_ADMIN_KEY) {
+        return json({ error: "Index admin disabled" }, 403);
+      }
+      const key = request.headers.get("X-Omni-Index-Key") || "";
+      if (key !== env.INDEX_ADMIN_KEY) {
+        return json({ error: "Unauthorized" }, 401);
+      }
       try {
         const body = (await request.json()) as {
           url?: string;

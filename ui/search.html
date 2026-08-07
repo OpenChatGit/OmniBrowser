@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Search</title>
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/scrollbar.css" />
+  <link rel="stylesheet" href="css/search.css" />
+  <link rel="preconnect" href="https://api.qubrain.org" crossorigin />
+  <link rel="preconnect" href="https://icons.duckduckgo.com" crossorigin />
+</head>
+<body>
+  <div class="serp">
+    <header class="serp-top">
+      <div class="serp-brand" aria-hidden="true">
+        <img class="serp-brand-mark" src="assets/qubrain.svg" alt="" width="28" height="28" />
+        <span class="serp-brand-name">QuBrain</span>
+      </div>
+
+      <div class="serp-top-main">
+        <form class="serp-search" id="serp-search" autocomplete="off" role="search">
+          <input
+            class="serp-search-input"
+            id="serp-q"
+            type="search"
+            name="q"
+            placeholder="Search the web"
+            spellcheck="false"
+            aria-label="Search"
+          />
+          <button type="submit" class="serp-search-go" aria-label="Search">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2" />
+              <path d="M20 20l-3.5-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+          </button>
+        </form>
+        <nav class="serp-tabs" id="serp-tabs" aria-label="Search categories">
+          <button type="button" class="serp-tab is-active" data-cat="general">All</button>
+          <button type="button" class="serp-tab" data-cat="images">Images</button>
+          <button type="button" class="serp-tab" data-cat="news">News</button>
+          <button type="button" class="serp-tab" data-cat="videos">Videos</button>
+        </nav>
+      </div>
+    </header>
+
+    <div class="serp-page">
+      <div class="serp-layout">
+        <main class="serp-main" id="serp-results" aria-live="polite">
+          <p class="serp-empty" id="serp-empty">Enter a search to see results.</p>
+          <div class="serp-pager" id="serp-pager" hidden>
+            <button type="button" class="serp-prev" id="serp-prev" hidden>
+              Previous
+            </button>
+            <button type="button" class="serp-next" id="serp-next">
+              Next page
+            </button>
+          </div>
+        </main>
+        <aside class="serp-side" id="serp-side" hidden></aside>
+      </div>
+    </div>
+  </div>
+  <script src="js/search.js"></script>
+</body>
+</html>

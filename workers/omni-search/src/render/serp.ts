@@ -8,7 +8,15 @@ import { renderOmniHome } from "./page";
 function siteNameFromUrl(url: string, fallbackTitle: string): string {
   try {
     const host = new URL(url).hostname.replace(/^www\./, "");
-    const base = host.split(".")[0] || host;
+    // Prefer readable brand for common multi-label hosts (en.wikipedia.org → Wikipedia).
+    const labels = host.split(".").filter(Boolean);
+    if (labels.length >= 2) {
+      const brand = labels[labels.length - 2];
+      if (brand.length > 2) {
+        return brand.charAt(0).toUpperCase() + brand.slice(1);
+      }
+    }
+    const base = labels[0] || host;
     if (base.length <= 1) {
       return fallbackTitle.split(/[|\-–—]/)[0]?.trim() || host;
     }
@@ -37,9 +45,11 @@ function displayUrl(url: string): string {
   }
 }
 
-function faviconUrl(url: string, size = 64): string {
+function faviconUrl(url: string, _size = 64): string {
   try {
-    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(new URL(url).hostname)}&sz=${size}`;
+    // Single CDN hop (DDG) — avoids Google s2 + /favicon.ico retry storms.
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    return `https://icons.duckduckgo.com/ip3/${host}.ico`;
   } catch {
     return "";
   }
@@ -536,11 +546,15 @@ export function renderSearchPage(payload: SearchResponse): Response {
 </body>
 </html>`;
 
+  const ok = payload.results.length > 0 && !payload.error;
   return withCors(
     new Response(html, {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
-        "Cache-Control": "no-store",
+        // Short edge/browser cache for successful SERPs; errors stay fresh.
+        "Cache-Control": ok
+          ? "public, max-age=60, stale-while-revalidate=300"
+          : "no-store",
       },
     }),
   );

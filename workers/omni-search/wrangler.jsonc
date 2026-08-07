@@ -1,0 +1,43 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "omni-search",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-20",
+  "workers_dev": true,
+  "browser": {
+    "binding": "BROWSER"
+  },
+  "ai": {
+    "binding": "AI"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "CACHE",
+      "id": "bc91fd24e4f34b80909bb362c37ccfad"
+    }
+  ],
+  "d1_databases": [
+    {
+      "binding": "INDEX",
+      "database_name": "qsearch-index",
+      "database_id": "a7b412fe-6dab-442e-90c6-922ae76eaa2a",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vectorize": [
+    {
+      "binding": "VECTORIZE",
+      "index_name": "qsearch"
+    }
+  ],
+  "routes": [
+    {
+      "pattern": "api.qubrain.org",
+      "custom_domain": true
+    },
+    {
+      "pattern": "search.qubrain.org",
+      "custom_domain": true
+    }
+  ]
+}
