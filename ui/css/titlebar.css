@@ -1,0 +1,308 @@
+.titlebar {
+  flex: 0 0 36px;
+  height: 36px;
+  display: grid;
+  grid-template-columns: auto minmax(48px, 1fr) auto;
+  align-items: center;
+  background: var(--bg-titlebar);
+  border-bottom: 0;
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.titlebar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  width: max-content;
+  max-width: min(70vw, 900px);
+  height: 100%;
+  padding: 0 0 0 0.35rem;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+  min-width: 0;
+  height: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.titlebar-tab {
+  appearance: none;
+  border: 0;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: calc(29ch + 1.5rem + 18px + 16px);
+  min-width: 96px;
+  height: 28px;
+  padding: 0 4px 0 8px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.25;
+  cursor: pointer;
+  flex: 0 1 auto;
+  transition: color 120ms ease, background 120ms ease;
+  -webkit-app-region: no-drag;
+  -webkit-font-smoothing: antialiased;
+}
+
+.titlebar-tab:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.titlebar-tab.is-active {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+.titlebar-tab.is-drag-source {
+  opacity: 0.35;
+}
+
+.titlebar-tab.is-tearoff-ghost {
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(0.92);
+  animation: tearoff-ghost-in 140ms ease forwards;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+@keyframes tearoff-ghost-in {
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.titlebar-tab.is-drop-gap {
+  width: 4px;
+  min-width: 4px;
+  max-width: 4px;
+  padding: 0;
+  margin: 0 2px;
+  border-radius: 2px;
+  background: var(--accent-strong, #1a9fff);
+  pointer-events: none;
+  flex: 0 0 4px;
+}
+
+.titlebar-tab-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10000;
+  margin: 0;
+  pointer-events: none;
+  opacity: 0.96;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  background: rgba(40, 39, 40, 0.96);
+  color: var(--text);
+  cursor: grabbing;
+  will-change: transform;
+}
+
+.titlebar-tabs.is-reordering {
+  cursor: grabbing;
+}
+
+.titlebar-tabs.is-reordering .titlebar-tab {
+  cursor: grabbing;
+}
+
+.titlebar-tab-favicon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  display: block;
+  object-fit: contain;
+  object-position: center;
+  pointer-events: none;
+  user-select: none;
+}
+
+.titlebar-tab-favicon[hidden] {
+  display: none !important;
+}
+
+.titlebar-tab-audio {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-tab-audio:hover,
+.titlebar-tab-audio:focus,
+.titlebar-tab-audio:active {
+  background: transparent;
+  outline: none;
+}
+
+.titlebar-tab-audio.is-muted {
+  color: var(--muted);
+  opacity: 0.5;
+}
+
+.titlebar-tab-audio .icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2px;
+  pointer-events: none;
+}
+
+.titlebar-tab-label {
+  min-width: 0;
+  max-width: 29ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.35;
+  padding-block: 1px;
+}
+
+.titlebar-tab-close {
+  appearance: none;
+  border: 0;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  margin: 0;
+  line-height: 0;
+  opacity: 0;
+  transition: opacity 100ms ease, background 100ms ease, color 100ms ease;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-tab:hover .titlebar-tab-close,
+.titlebar-tab.is-active .titlebar-tab-close {
+  opacity: 1;
+}
+
+.titlebar-tab-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}
+
+.titlebar-tab-close .icon {
+  display: block;
+  width: 12px;
+  height: 12px;
+  stroke-width: 2px;
+}
+
+.titlebar-tab-new {
+  appearance: none;
+  border: 0;
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  line-height: 0;
+  transition: background 120ms ease, color 120ms ease;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-tab-new:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.titlebar-tab-new .icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+  stroke-width: 2px;
+}
+
+.titlebar-drag {
+  height: 100%;
+  min-width: 48px;
+  -webkit-app-region: drag;
+}
+
+.titlebar-controls {
+  display: flex;
+  height: 100%;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-btn {
+  appearance: none;
+  border: 0;
+  margin: 0;
+  width: 46px;
+  height: 100%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 120ms ease, color 120ms ease;
+  -webkit-app-region: no-drag;
+}
+
+.titlebar-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+.titlebar-btn.close:hover {
+  background: #c42b1c;
+  color: #fff;
+}
+
+.titlebar-btn .window-icon {
+  font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets", sans-serif;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+  speak: never;
+  display: block;
+  -webkit-font-smoothing: antialiased;
+}

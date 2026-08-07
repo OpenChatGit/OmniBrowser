@@ -1,0 +1,31 @@
+# QuBrain / QSearch — private SearXNG instance (JSON API enabled).
+use_default_settings:
+  engines:
+    # Onion / SPARQL engines that fail to load or init on typical Docker hosts.
+    remove:
+      - ahmia
+      - torch
+      - wikidata
+
+general:
+  instance_name: "QSearch SearXNG"
+  enable_metrics: false
+
+search:
+  safe_search: 0
+  autocomplete: ""
+  default_lang: "auto"
+  formats:
+    - html
+    - json
+
+server:
+  # Overwritten by SEARXNG_SECRET / SEARXNG_BASE_URL env when set.
+  secret_key: "ultrasecretkey"
+  limiter: false
+  public_instance: false
+  image_proxy: false
+  method: "GET"
+
+ui:
+  static_use_hash: true

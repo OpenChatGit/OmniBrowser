@@ -1,0 +1,267 @@
+:root {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(102, 192, 244, 0.06), transparent 55%),
+    linear-gradient(180deg, #161516 0%, var(--bg-deep) 48%, #101010 100%);
+  color: var(--text);
+  font-family: var(--font);
+}
+
+body {
+  min-height: 100vh;
+}
+
+.hist {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  align-items: start;
+  gap: 24px;
+  min-height: 100vh;
+  padding: 28px 24px 48px;
+}
+
+.hist-aside {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 20px;
+  justify-self: start;
+}
+
+.hist-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 4px;
+}
+
+.hist-brand-mark {
+  display: block;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.hist-brand-name {
+  font-family: var(--font-brand);
+  font-size: 1.45rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.hist-navs {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+}
+
+.hist-nav {
+  appearance: none;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hist-nav:hover {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.hist-nav.is-active {
+  border-color: var(--stroke);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+
+.hist-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.hist-search-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  margin-bottom: 22px;
+}
+
+.hist-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 520px;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  background: rgba(36, 35, 36, 0.9);
+}
+
+.hist-search-icon {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.hist-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 40px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.92rem;
+  outline: none;
+}
+
+.hist-search-input::placeholder {
+  color: var(--muted);
+}
+
+.hist-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.hist-day-box {
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  background: rgba(26, 25, 26, 0.72);
+  overflow: hidden;
+}
+
+.hist-day {
+  margin: 0;
+  padding: 12px 14px 8px;
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-transform: none;
+  text-align: left;
+}
+
+.hist-day-rows {
+  padding: 0 8px 8px;
+}
+
+.hist-day-box > .hist-day-rows:first-child {
+  padding-top: 8px;
+}
+
+.hist-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 32px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 6px;
+  border-radius: 8px;
+}
+
+.hist-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.hist-favicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 2px;
+  object-fit: contain;
+}
+
+.hist-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.hist-link {
+  color: var(--text);
+  font-size: 0.92rem;
+  font-weight: 500;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hist-link:hover {
+  color: var(--accent);
+}
+
+.hist-tool {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.hist-tool:hover {
+  background: var(--bg-hover);
+  color: var(--danger, #f07178);
+}
+
+.hist-empty {
+  margin: 40px 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+@media (max-width: 860px) {
+  .hist {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    padding: 20px 14px 40px;
+  }
+
+  .hist-aside {
+    width: 100%;
+  }
+
+  .hist-navs {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+}

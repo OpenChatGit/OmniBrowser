@@ -1,0 +1,381 @@
+/* Tab-tip + History flyout overlay. App menu chrome stays native Views. */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: max-content;
+  height: auto;
+  min-height: 0;
+  overflow: hidden !important;
+  scrollbar-width: none;
+  background: #292829;
+  color: var(--text, #ececec);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  user-select: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+#overlay-root::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+
+body.is-tab-tip {
+  background: #292829;
+}
+
+body.is-history,
+html:has(body.is-history) {
+  background: transparent;
+}
+
+body.is-media {
+  background: #2b2a2b;
+}
+
+#overlay-root {
+  display: block;
+  width: max-content;
+  height: auto;
+  overflow: hidden;
+}
+
+#overlay-root .omni-tab-tip {
+  width: 280px;
+  box-sizing: border-box;
+  background: #292829;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
+  color: var(--text, #ececec);
+  font-family: inherit;
+  pointer-events: none;
+}
+
+#overlay-root .omni-tab-tip-head {
+  padding: 0.7rem 0.85rem 0.65rem;
+}
+
+#overlay-root .omni-tab-tip-title {
+  color: #f2f2f2;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+#overlay-root .omni-tab-tip-domain {
+  margin-top: 0.2rem;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 0.7rem;
+  font-weight: 450;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+}
+
+#overlay-root .omni-tab-tip-meta {
+  padding: 0.55rem 0.85rem 0.7rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+#overlay-root .omni-tab-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.7rem;
+  font-weight: 450;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+#overlay-root .omni-tab-tip-row svg {
+  flex: 0 0 auto;
+  width: 14px;
+  height: 14px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+/* History flyout — mirrors native Views menu styling. */
+#overlay-root .omni-history {
+  width: 300px;
+  max-width: 300px;
+  padding: 4px 0;
+  background: #2b2a2b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
+  box-shadow: none;
+  pointer-events: auto;
+}
+
+#overlay-root .omni-history-sep {
+  height: 1px;
+  margin: 4px 10px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+#overlay-root .omni-history-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 7px 14px;
+  border: 0;
+  background: transparent;
+  color: #f0f0f0;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 450;
+  letter-spacing: -0.01em;
+  text-align: left;
+  cursor: default;
+}
+
+#overlay-root .omni-history-item:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+#overlay-root .omni-history-item:disabled {
+  opacity: 0.55;
+}
+
+#overlay-root .omni-history-favicon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  display: block;
+  object-fit: contain;
+  border-radius: 2px;
+}
+
+#overlay-root .omni-history-favicon.is-action,
+#overlay-root .omni-history-favicon[hidden] {
+  visibility: hidden;
+}
+
+#overlay-root .omni-history-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#overlay-root .omni-history-shortcut {
+  flex: 0 0 auto;
+  margin-left: 12px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.72rem;
+  font-weight: 450;
+  letter-spacing: 0.01em;
+}
+
+/* Global media controls — same overlay chrome as history / tab-tip. */
+#overlay-root .omni-media {
+  width: 320px;
+  max-width: 320px;
+  padding: 12px 12px 10px;
+  box-sizing: border-box;
+  background: #2b2a2b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
+  box-shadow: none;
+  color: #f0f0f0;
+  font-family: inherit;
+  pointer-events: auto;
+}
+
+#overlay-root .omni-media-main {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+
+#overlay-root .omni-media-art {
+  width: 64px;
+  height: 64px;
+  border-radius: 2px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+  display: block;
+}
+
+#overlay-root .omni-media-art-fallback {
+  width: 64px;
+  height: 64px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.06);
+  display: grid;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+#overlay-root .omni-media-meta {
+  min-width: 0;
+  padding-top: 1px;
+}
+
+#overlay-root .omni-media-source {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-bottom: 4px;
+  color: rgba(255, 255, 255, 0.52);
+  font-size: 0.72rem;
+  font-weight: 450;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+#overlay-root .omni-media-favicon {
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+#overlay-root .omni-media-origin {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#overlay-root .omni-media-title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+  color: #f2f2f2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#overlay-root .omni-media-artist {
+  margin: 2px 0 0;
+  font-size: 0.72rem;
+  font-weight: 450;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: rgba(255, 255, 255, 0.52);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#overlay-root .omni-media-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+#overlay-root .omni-media-icon-btn {
+  appearance: none;
+  border: 0;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.78);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+#overlay-root .omni-media-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+#overlay-root .omni-media-play {
+  appearance: none;
+  border: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+#overlay-root .omni-media-play:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+#overlay-root .omni-media-seek {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#overlay-root .omni-media-seek .omni-media-icon-btn {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+}
+
+#overlay-root .omni-media-range {
+  appearance: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 18px;
+  margin: 0 4px;
+  background: transparent;
+  cursor: pointer;
+}
+
+#overlay-root .omni-media-range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+#overlay-root .omni-media-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 3px;
+  height: 14px;
+  margin-top: -5.5px;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.88);
+  border: 0;
+}
+
+#overlay-root .omni-media-range::-moz-range-track {
+  height: 3px;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+#overlay-root .omni-media-range::-moz-range-thumb {
+  width: 3px;
+  height: 14px;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.88);
+  border: 0;
+}

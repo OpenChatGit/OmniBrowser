@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Info</title>
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/scrollbar.css" />
+  <link rel="stylesheet" href="css/history.css" />
+  <link rel="stylesheet" href="css/info.css" />
+</head>
+<body>
+  <div class="hist">
+    <aside class="hist-aside" aria-label="Info">
+      <div class="hist-brand">
+        <img class="hist-brand-mark" src="assets/qubrain.svg" alt="" width="28" height="28" />
+        <span class="hist-brand-name">Info</span>
+      </div>
+      <nav class="hist-navs" aria-label="Info sections">
+        <button type="button" class="hist-nav is-active" id="info-nav-about" data-nav="about">
+          About
+        </button>
+        <button type="button" class="hist-nav" id="info-nav-updates" data-nav="updates">
+          Updates
+        </button>
+      </nav>
+    </aside>
+
+    <main class="hist-main">
+      <section class="info-panel is-active" id="info-panel-about" data-panel="about">
+        <div class="info-hero">
+          <img class="info-hero-mark" src="assets/qubrain.svg" alt="" width="56" height="56" />
+          <div class="info-hero-text">
+            <h1 class="info-title">Omni Browser</h1>
+            <p class="info-subtitle">Open-source desktop browser</p>
+          </div>
+        </div>
+        <div class="info-card">
+          <p class="info-lead">
+            A lightweight desktop browser built around QuBrain Search — fast local
+            chrome, Chromium under the hood, and a start page that stays out of the way.
+          </p>
+          <dl class="info-facts">
+            <div class="info-fact">
+              <dt>Product</dt>
+              <dd>Omni Browser</dd>
+            </div>
+            <div class="info-fact">
+              <dt>Engine</dt>
+              <dd>Chromium Embedded Framework (CEF)</dd>
+            </div>
+            <div class="info-fact">
+              <dt>Search</dt>
+              <dd>QuBrain Search (default) and other engines</dd>
+            </div>
+            <div class="info-fact">
+              <dt>Status</dt>
+              <dd>Preview — UI is being worked on</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="info-panel" id="info-panel-updates" data-panel="updates" hidden>
+        <h2 class="info-section-title">Updates</h2>
+        <p class="info-updates-status" id="info-updates-status" hidden></p>
+        <div class="info-updates" id="info-updates" aria-live="polite"></div>
+      </section>
+    </main>
+  </div>
+  <script src="js/info.js"></script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>History</title>
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/scrollbar.css" />
+  <link rel="stylesheet" href="css/history.css" />
+</head>
+<body>
+  <div class="hist">
+    <aside class="hist-aside" aria-label="History">
+      <div class="hist-brand">
+        <img class="hist-brand-mark" src="assets/qubrain.svg" alt="" width="28" height="28" />
+        <span class="hist-brand-name">History</span>
+      </div>
+      <nav class="hist-navs" aria-label="History actions">
+        <button type="button" class="hist-nav is-active" id="hist-nav-omni" data-nav="omni">
+          Omni Browser history
+        </button>
+        <button type="button" class="hist-nav" id="hist-nav-clear" data-nav="clear">
+          Delete browsing data
+        </button>
+      </nav>
+    </aside>
+
+    <main class="hist-main">
+      <div class="hist-search-row">
+        <form class="hist-search" id="hist-search" role="search" autocomplete="off">
+          <svg class="hist-search-icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2" />
+            <path d="M20 20l-3.5-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+          <input
+            class="hist-search-input"
+            id="hist-q"
+            type="search"
+            name="q"
+            placeholder="Search history"
+            spellcheck="false"
+            aria-label="Search history"
+          />
+        </form>
+        <div class="hist-actions" id="hist-actions" hidden>
+          <button type="button" class="hist-action" id="hist-remove-selected" aria-label="Remove selected">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path
+                d="M5 7h14M10 11v6M14 11v6M9 7V5h6v2M7 7l1 12h8l1-12"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="hist-list" id="hist-list" aria-live="polite"></div>
+      <p class="hist-empty" id="hist-empty" hidden>No history yet.</p>
+    </main>
+  </div>
+  <script src="js/history.js"></script>
+</body>
+</html>

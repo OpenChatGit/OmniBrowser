@@ -1,0 +1,29 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-deep);
+  color: var(--text);
+  font-family: var(--font);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.app-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 100%;
+}

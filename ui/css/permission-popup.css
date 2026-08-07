@@ -1,0 +1,236 @@
+.qb-perm-chip {
+  appearance: none;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  max-width: 46%;
+  margin: 0;
+  padding: 0.28rem 0.55rem;
+  border: 0;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #f0f0f0;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.qb-perm-chip[hidden] {
+  display: none !important;
+}
+
+.qb-perm-chip:hover,
+.qb-perm-chip.is-active {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.qb-perm-chip svg {
+  flex-shrink: 0;
+  color: #e8e8e8;
+}
+
+.qb-perm-chip-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Browser-style site permission prompt (location, etc.) */
+.qb-perm {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 4.5rem 1.1rem 1rem;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.qb-perm.is-anchored {
+  background: transparent;
+  pointer-events: none;
+}
+
+.qb-perm.is-anchored .qb-perm-card {
+  pointer-events: auto;
+}
+
+.qb-perm-card {
+  width: min(360px, calc(100vw - 1.5rem));
+  border-radius: 14px;
+  background: #2b2b2d;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+  color: #e8e8e8;
+  overflow: hidden;
+  font-family: var(--font, system-ui, sans-serif);
+}
+
+.qb-perm-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.9rem 0.85rem 0.35rem 1rem;
+}
+
+.qb-perm-asking {
+  flex: 1 1 auto;
+  margin: 0;
+  color: #b8b8b8;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.qb-perm-asking strong {
+  color: #f0f0f0;
+  font-weight: 600;
+}
+
+.qb-perm-x {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #aaa;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.qb-perm-x:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.qb-perm-body {
+  padding: 0.35rem 1rem 0.95rem;
+}
+
+.qb-perm-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0.35rem 0 0.85rem;
+}
+
+.qb-perm-icon {
+  display: inline-flex;
+  color: #cfcfcf;
+}
+
+.qb-perm-title {
+  font-size: 0.95rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: #f5f5f5;
+}
+
+.qb-perm-remember {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.qb-perm-remember-label {
+  color: #cfcfcf;
+  font-size: 0.8rem;
+}
+
+.qb-perm-select {
+  appearance: none;
+  min-width: 0;
+  max-width: 58%;
+  padding: 0.35rem 1.6rem 0.35rem 0.55rem;
+  border-radius: 8px;
+  border: 1px solid #4a4a4a;
+  background:
+    linear-gradient(45deg, transparent 50%, #bbb 50%) no-repeat right 10px center / 5px 5px,
+    linear-gradient(135deg, #bbb 50%, transparent 50%) no-repeat right 6px center / 5px 5px,
+    #3a3a3c;
+  color: #f0f0f0;
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.qb-perm-precise {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin: 0 0 1rem;
+  color: #d8d8d8;
+  font-size: 0.76rem;
+  line-height: 1.4;
+}
+
+.qb-perm-warn {
+  flex-shrink: 0;
+  color: #f0c14b;
+  font-size: 0.85rem;
+  line-height: 1.2;
+}
+
+.qb-perm-precise-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.qb-perm-link {
+  color: #8ab4f8;
+  text-decoration: none;
+}
+
+.qb-perm-link:hover {
+  text-decoration: underline;
+}
+
+.qb-perm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.45rem;
+}
+
+.qb-perm-btn {
+  appearance: none;
+  min-width: 72px;
+  padding: 0.42rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid #4a4a4a;
+  background: #3a3a3c;
+  color: #f2f2f2;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 550;
+  cursor: pointer;
+}
+
+.qb-perm-btn:hover {
+  background: #454548;
+}
+
+.qb-perm-btn-allow {
+  border-color: #6a8cff;
+  box-shadow: 0 0 0 1px rgba(106, 140, 255, 0.25);
+}
+
+.qb-perm-foot {
+  padding: 0.7rem 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.18);
+  color: #9a9a9a;
+  font-size: 0.72rem;
+  line-height: 1.4;
+}

@@ -370,7 +370,7 @@ export default {
         product: "QuBrain",
         ui: "https://search.qubrain.org/",
         updates: "https://search.qubrain.org/updates",
-        home: "Omni",
+        home: "Omni Browser",
         api: "https://api.qubrain.org/v1/search",
       });
     }

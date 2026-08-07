@@ -1,7 +1,7 @@
 import { withCors } from "../cors";
 import { omniBrandMarkImg } from "./brand";
 
-/** Same start surface as OmniLauncher — preview notice, clock, search. */
+/** Same start surface as Omni Browser — preview notice, clock, search. */
 export function renderOmniHome(): Response {
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -177,7 +177,7 @@ export function renderOmniHome(): Response {
       align-items: center;
       justify-content: center;
       gap: 0.75rem;
-      height: 44px;
+      min-height: 44px;
       margin-bottom: 1.35rem;
       animation: browser-mark-in 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
     }
@@ -191,15 +191,16 @@ export function renderOmniHome(): Response {
     }
     .browser-brand {
       margin: 0;
-      height: 40px;
+      min-height: 40px;
       display: flex;
       align-items: center;
       font-family: var(--font-brand);
-      font-size: clamp(2.4rem, 5vw, 3.4rem);
+      font-size: clamp(1.85rem, 4.2vw, 2.85rem);
       font-weight: 600;
       letter-spacing: -0.045em;
       line-height: 1;
       color: var(--text);
+      white-space: nowrap;
     }
     @keyframes browser-mark-in {
       from { opacity: 0; transform: translateY(10px); }
@@ -300,7 +301,7 @@ export function renderOmniHome(): Response {
     </div>
     <div class="browser-brand-row">
       ${omniBrandMarkImg(40)}
-      <h1 class="browser-brand">Omni</h1>
+      <h1 class="browser-brand">Omni Browser</h1>
     </div>
     <form class="browser-search" action="/search" method="get" role="search" autocomplete="off">
       <span class="browser-search-icon" aria-hidden="true">

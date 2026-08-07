@@ -1,0 +1,274 @@
+﻿.topbar {
+  --topbar-side: 6rem;
+  flex: 0 0 44px;
+  height: 44px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 0.85rem;
+  background: var(--bg-titlebar);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  -webkit-app-region: no-drag;
+  min-width: 0;
+  overflow: visible;
+  z-index: 30;
+}
+
+.topbar-nav {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  flex: 0 0 var(--topbar-side);
+  min-width: var(--topbar-side);
+}
+
+.topbar-actions {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.15rem;
+  flex: 0 0 auto;
+  min-width: var(--topbar-side);
+  overflow: visible;
+}
+
+.topbar-actions .topbar-btn:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text);
+}
+
+.topbar-actions .topbar-btn .icon {
+  width: 20px;
+  height: 20px;
+  stroke-width: 2px;
+}
+
+.topbar-download {
+  position: relative;
+  width: 34px;
+  height: 34px;
+}
+
+.topbar-download[hidden] {
+  display: none !important;
+}
+
+.topbar-download-ring {
+  position: absolute;
+  inset: 2px;
+  width: calc(100% - 4px);
+  height: calc(100% - 4px);
+  transform: rotate(-90deg);
+  pointer-events: none;
+}
+
+.topbar-download-track,
+.topbar-download-progress {
+  fill: none;
+  stroke-width: 2.4;
+}
+
+.topbar-download-track {
+  stroke: rgba(255, 255, 255, 0.14);
+}
+
+.topbar-download-progress {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-dasharray: 91.106;
+  stroke-dashoffset: 91.106;
+  transition: stroke-dashoffset 160ms ease, stroke 160ms ease;
+}
+
+.topbar-download.is-complete .topbar-download-progress {
+  stroke: var(--play);
+}
+
+.topbar-download-glyph {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--text);
+}
+
+.topbar-download-glyph .icon {
+  width: 16px !important;
+  height: 16px !important;
+  stroke-width: 2.1px;
+}
+
+.topbar-center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  box-sizing: border-box;
+  width: min(860px, calc(100% - (var(--topbar-side) * 2) - 1.7rem));
+  max-width: 860px;
+  min-width: 0;
+}
+
+.topbar-btn {
+  appearance: none;
+  border: 0;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  line-height: 0;
+  transition: background 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+.topbar-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.topbar-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.topbar-btn .icon {
+  display: block;
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.75px;
+}
+
+.topbar-center .topbar-btn {
+  flex-shrink: 0;
+}
+
+.topbar-bookmark {
+  width: 32px;
+  height: 32px;
+}
+
+.topbar-bookmark:hover:not(:disabled) {
+  background: transparent;
+  color: var(--muted);
+}
+
+.topbar-bookmark .icon {
+  width: 20px;
+  height: 20px;
+  stroke-width: 1.75px;
+  fill: none;
+  transition: fill 120ms ease, color 120ms ease;
+}
+
+.topbar-bookmark.is-active {
+  color: var(--text);
+}
+
+.topbar-bookmark.is-active .icon {
+  fill: currentColor;
+}
+
+.topbar-search {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 32px;
+  padding: 0 0.35rem 0 0.75rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
+}
+
+.topbar-search:focus-within {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.04);
+}
+
+.topbar-search-icon {
+  width: 15px;
+  height: 15px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  flex-shrink: 0;
+  line-height: 0;
+}
+
+.topbar-search-icon .icon {
+  display: block;
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.75px;
+}
+
+.topbar-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  appearance: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.82rem;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  padding: 0;
+}
+
+.topbar-search-input::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.topbar-search-go {
+  appearance: none;
+  border: 0;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.topbar-search-go:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text);
+}
+
+.topbar-search-go .icon {
+  display: block;
+  width: 14px;
+  height: 14px;
+  stroke-width: 2px;
+}

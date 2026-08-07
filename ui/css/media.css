@@ -1,0 +1,15 @@
+/* Media button in the shell topbar. Panel UI lives in the native overlay. */
+
+.topbar-media-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.topbar-media-wrap[hidden] {
+  display: none !important;
+}
+
+.topbar-media.is-playing {
+  color: var(--text);
+}

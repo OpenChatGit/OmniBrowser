@@ -1,0 +1,257 @@
+/* Info page — reuses History layout (.hist*); content blocks below. */
+
+.info-panel {
+  width: 100%;
+  max-width: 720px;
+}
+
+#info-panel-updates.info-panel {
+  max-width: 820px;
+}
+
+.info-panel[hidden] {
+  display: none !important;
+}
+
+.info-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  margin: 8px 0 22px;
+}
+
+.info-hero-mark {
+  display: block;
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.info-hero-text {
+  min-width: 0;
+}
+
+.info-title {
+  margin: 0;
+  font-family: var(--font-brand);
+  font-size: 1.85rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.info-subtitle {
+  margin: 4px 0 0;
+  font-size: 0.92rem;
+  font-weight: 450;
+  color: var(--muted);
+}
+
+.info-section-title {
+  margin: 8px 0 18px;
+  font-family: var(--font-brand);
+  font-size: 1.35rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.info-card {
+  width: 100%;
+  padding: 18px 18px 16px;
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.info-lead {
+  margin: 0 0 18px;
+  font-size: 0.92rem;
+  font-weight: 450;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.info-facts {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.info-fact {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+}
+
+.info-fact dt {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.info-fact dd {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 450;
+  color: var(--text);
+}
+
+.info-updates-status {
+  margin: 0 0 14px;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
+.info-updates {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 100%;
+}
+
+.info-update {
+  width: 100%;
+  padding: 16px 16px 14px;
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.info-update-date {
+  margin: 0 0 6px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.info-update-title {
+  margin: 0 0 10px;
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.info-update-body {
+  font-size: 0.9rem;
+  font-weight: 450;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.info-update-body > :first-child {
+  margin-top: 0;
+}
+
+.info-update-body > :last-child {
+  margin-bottom: 0;
+}
+
+.info-update-body p {
+  margin: 0 0 0.75em;
+}
+
+.info-update-body h1,
+.info-update-body h2,
+.info-update-body h3 {
+  margin: 0.9em 0 0.45em;
+  font-family: var(--font-brand);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  line-height: 1.25;
+}
+
+.info-update-body h1 {
+  font-size: 1.15rem;
+}
+
+.info-update-body h2 {
+  font-size: 1.05rem;
+}
+
+.info-update-body h3 {
+  font-size: 0.95rem;
+}
+
+.info-update-body ul,
+.info-update-body ol {
+  margin: 0 0 0.75em;
+  padding-left: 1.2em;
+}
+
+.info-update-body li {
+  margin: 0.2em 0;
+}
+
+.info-update-body a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.info-update-body a:hover {
+  text-decoration: underline;
+}
+
+.info-update-body code {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 0.86em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.info-update-body strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.info-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  margin: 0 0 0.9em;
+  border: 1px solid var(--stroke);
+  border-radius: 8px;
+}
+
+.info-update-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+}
+
+.info-update-body th,
+.info-update-body td {
+  padding: 0.55rem 0.7rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.info-update-body th {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.info-update-body td {
+  color: rgba(255, 255, 255, 0.86);
+}
+
+.info-update-body tr:last-child td {
+  border-bottom: 0;
+}

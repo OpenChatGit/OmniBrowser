@@ -1,0 +1,35 @@
+:root {
+  --bg-deep: #121112;
+  --bg-titlebar: #1a191a;
+  --bg-panel: #1a191a;
+  --bg-elevated: #242324;
+  --bg-hover: #2c2b2c;
+  --stroke: #2a292a;
+  --text: #e4e4e4;
+  --muted: #8a8a8a;
+  --accent: #66c0f4;
+  --accent-strong: #1a9fff;
+  --play: #5caf2d;
+  --play-hover: #6fcf3a;
+  --danger: #d94b4b;
+  --shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+  --radius: 10px;
+  --font: "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-brand: "Space Grotesk", "Segoe UI Variable Display", system-ui, sans-serif;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("../assets/fonts/InterVariable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Space Grotesk";
+  src: url("../assets/fonts/SpaceGrotesk-Variable.ttf") format("truetype");
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}

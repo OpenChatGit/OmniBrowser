@@ -1,0 +1,264 @@
+(() => {
+  function nativeQuery(payload, { persistent = false, onMessage } = {}) {
+    return new Promise((resolve, reject) => {
+      if (typeof window.cefQuery !== "function") {
+        reject(new Error("Native bridge unavailable (cefQuery missing)"));
+        return;
+      }
+
+      const request = {
+        request: JSON.stringify(payload),
+        persistent: Boolean(persistent),
+        onSuccess(response) {
+          try {
+            const parsed = response ? JSON.parse(response) : null;
+            if (persistent && typeof onMessage === "function") {
+              onMessage(parsed);
+              return;
+            }
+            resolve(parsed);
+          } catch (err) {
+            if (persistent && typeof onMessage === "function") {
+              onMessage(null, err);
+              return;
+            }
+            reject(err);
+          }
+        },
+        onFailure(code, message) {
+          const err = new Error(message || `Native error ${code}`);
+          if (persistent && typeof onMessage === "function") {
+            onMessage(null, err);
+            return;
+          }
+          reject(err);
+        },
+      };
+
+      const queryId = window.cefQuery(request);
+      if (persistent) {
+        resolve({
+          queryId,
+          cancel() {
+            if (typeof window.cefQueryCancel === "function" && queryId != null) {
+              window.cefQueryCancel(queryId);
+            }
+          },
+        });
+      }
+    });
+  }
+
+  window.OmniBridge = {
+    windowMinimize() {
+      return nativeQuery({ method: "window.minimize", params: {} });
+    },
+    windowToggleMaximize() {
+      return nativeQuery({ method: "window.toggleMaximize", params: {} });
+    },
+    windowClose() {
+      return nativeQuery({ method: "window.close", params: {} });
+    },
+    windowIsMaximized() {
+      return nativeQuery({ method: "window.isMaximized", params: {} });
+    },
+    windowNew() {
+      return nativeQuery({ method: "window.new", params: {} });
+    },
+    windowCursorPos() {
+      return nativeQuery({ method: "window.cursorPos", params: {} });
+    },
+    windowNewWithTab(tab) {
+      return nativeQuery({
+        method: "window.newWithTab",
+        params: {
+          tab: tab && typeof tab === "object" ? tab : {},
+        },
+      });
+    },
+    tabConsumePending() {
+      return nativeQuery({ method: "tab.consumePending", params: {} });
+    },
+    browserNavigate(url, tabId) {
+      const params = { url };
+      if (tabId) {
+        params.tabId = String(tabId);
+      }
+      return nativeQuery({ method: "browser.navigate", params });
+    },
+    browserEnsureTab(tabId) {
+      return nativeQuery({
+        method: "browser.ensureTab",
+        params: { tabId: String(tabId || "") },
+      });
+    },
+    browserActivateTab(tabId) {
+      return nativeQuery({
+        method: "browser.activateTab",
+        params: { tabId: String(tabId || "") },
+      });
+    },
+    browserCloseTab(tabId) {
+      return nativeQuery({
+        method: "browser.closeTab",
+        params: { tabId: String(tabId || "") },
+      });
+    },
+    browserBack() {
+      return nativeQuery({ method: "browser.back", params: {} });
+    },
+    browserForward() {
+      return nativeQuery({ method: "browser.forward", params: {} });
+    },
+    browserReload(ignoreCache = false) {
+      return nativeQuery({
+        method: "browser.reload",
+        params: { ignoreCache: Boolean(ignoreCache) },
+      });
+    },
+    browserStop() {
+      return nativeQuery({ method: "browser.stop", params: {} });
+    },
+    browserClear() {
+      return nativeQuery({ method: "browser.clear", params: {} });
+    },
+    browserShow(visible = true) {
+      return nativeQuery({
+        method: "browser.show",
+        params: { visible: Boolean(visible) },
+      });
+    },
+    browserSetChromeHeight(height) {
+      return nativeQuery({
+        method: "browser.setChromeHeight",
+        params: { height: Number(height) || 80 },
+      });
+    },
+    browserState() {
+      return nativeQuery({ method: "browser.state", params: {} });
+    },
+    browserSetAudioMuted(muted, tabId) {
+      const params = { muted: Boolean(muted) };
+      if (tabId) {
+        params.tabId = String(tabId);
+      }
+      return nativeQuery({
+        method: "browser.setAudioMuted",
+        params,
+      });
+    },
+    browserMediaControl(action, { tabId, value } = {}) {
+      const params = { action: String(action || "") };
+      if (tabId) {
+        params.tabId = String(tabId);
+      }
+      if (value != null && Number.isFinite(Number(value))) {
+        params.value = Number(value);
+      }
+      return nativeQuery({
+        method: "browser.mediaControl",
+        params,
+      });
+    },
+    overlayShow(params) {
+      return nativeQuery({ method: "overlay.show", params });
+    },
+    overlayResize(params) {
+      return nativeQuery({ method: "overlay.resize", params });
+    },
+    overlayHide() {
+      return nativeQuery({ method: "overlay.hide", params: {} });
+    },
+    overlayCommand(command) {
+      return nativeQuery({ method: "overlay.command", params: { command } });
+    },
+    menuShow(params) {
+      return nativeQuery({ method: "menu.show", params });
+    },
+    menuHide() {
+      return nativeQuery({ method: "menu.hide", params: {} });
+    },
+    historyList() {
+      return nativeQuery({ method: "history.list", params: {} });
+    },
+    historyRecord(entry) {
+      return nativeQuery({
+        method: "history.record",
+        params: {
+          url: entry && entry.url ? String(entry.url) : "",
+          title: entry && entry.title ? String(entry.title) : "",
+          ts: Number(entry && entry.ts) || Date.now(),
+        },
+      });
+    },
+    historyRemove(url) {
+      return nativeQuery({
+        method: "history.remove",
+        params: { url: String(url || "") },
+      });
+    },
+    historyClear() {
+      return nativeQuery({ method: "history.clear", params: {} });
+    },
+    historyImport(entries) {
+      return nativeQuery({
+        method: "history.import",
+        params: { entries: Array.isArray(entries) ? entries : [] },
+      });
+    },
+    bookmarksList() {
+      return nativeQuery({ method: "bookmarks.list", params: {} });
+    },
+    bookmarksRecord(entry) {
+      return nativeQuery({
+        method: "bookmarks.record",
+        params: {
+          url: entry && entry.url ? String(entry.url) : "",
+          title: entry && entry.title ? String(entry.title) : "",
+          ts: Number(entry && entry.ts) || Date.now(),
+        },
+      });
+    },
+    bookmarksRemove(url) {
+      return nativeQuery({
+        method: "bookmarks.remove",
+        params: { url: String(url || "") },
+      });
+    },
+    bookmarksClear() {
+      return nativeQuery({ method: "bookmarks.clear", params: {} });
+    },
+    bookmarksImport(entries) {
+      return nativeQuery({
+        method: "bookmarks.import",
+        params: { entries: Array.isArray(entries) ? entries : [] },
+      });
+    },
+    overlaySubscribe(onEvent) {
+      return nativeQuery(
+        { method: "overlay.subscribe", params: {} },
+        {
+          persistent: true,
+          onMessage(msg, err) {
+            if (typeof onEvent === "function") {
+              onEvent(msg, err);
+            }
+          },
+        }
+      );
+    },
+    browserSubscribe(onEvent) {
+      return nativeQuery(
+        { method: "browser.subscribe", params: {} },
+        {
+          persistent: true,
+          onMessage(msg, err) {
+            if (typeof onEvent === "function") {
+              onEvent(msg, err);
+            }
+          },
+        }
+      );
+    },
+  };
+})();
