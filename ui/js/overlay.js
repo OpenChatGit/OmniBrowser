@@ -163,7 +163,7 @@
   }
 
   function renderTabTip(payload) {
-    document.body.classList.remove("is-history", "is-media");
+    document.body.classList.remove("is-history", "is-media", "is-shields");
     document.body.classList.add("is-tab-tip");
     const data = payload || {};
 
@@ -381,7 +381,7 @@
   }
 
   function renderMedia(payload) {
-    document.body.classList.remove("is-tab-tip", "is-history");
+    document.body.classList.remove("is-tab-tip", "is-history", "is-shields");
     document.body.classList.add("is-media");
     const data = payload || {};
     if (patchMedia(data)) {
@@ -418,7 +418,7 @@
   }
 
   function renderHistory(payload) {
-    document.body.classList.remove("is-tab-tip", "is-media");
+    document.body.classList.remove("is-tab-tip", "is-media", "is-shields");
     document.body.classList.add("is-history");
 
     lastReportW = 0;
@@ -478,6 +478,246 @@
     requestAnimationFrame(reportSize);
   }
 
+  const ICON_GEAR =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>';
+  const ICON_CHEVRON =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.85" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>';
+
+  let shieldsAdvancedOpen = false;
+
+  function formatShieldCount(n) {
+    return (Number(n) || 0).toLocaleString();
+  }
+
+  async function applyShieldAction(action, data) {
+    if (!window.OmniBridge) {
+      return data;
+    }
+    const host = String(data.host || "");
+    try {
+      if (action === "toggle-site") {
+        if (host) {
+          return await OmniBridge.adblockAllowlist(host, Boolean(data.siteShieldsUp));
+        }
+        return await OmniBridge.adblockSet({
+          enabled: !data.enabled,
+          host: "",
+        });
+      }
+      if (action === "toggle-aggressive") {
+        return await OmniBridge.adblockSet({
+          aggressive: !data.aggressive,
+          host,
+        });
+      }
+      if (action === "toggle-global") {
+        return await OmniBridge.adblockSet({
+          enabled: !data.enabled,
+          host,
+        });
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    return data;
+  }
+
+  function normalizeShieldData(raw, previous) {
+    const prev = previous || {};
+    const next = raw && typeof raw === "object" ? raw : {};
+    const host = String(next.host || prev.host || "");
+    const enabled =
+      typeof next.enabled === "boolean" ? next.enabled : Boolean(prev.enabled);
+    let siteUp = true;
+    if (typeof next.siteShieldsUp === "boolean") {
+      siteUp = next.siteShieldsUp;
+    } else if (host && Array.isArray(next.allowlist)) {
+      siteUp =
+        enabled &&
+        !next.allowlist.some((entry) => {
+          const e = String(entry || "").replace(/^www\./i, "");
+          return e === host || host.endsWith(`.${e}`);
+        });
+    } else if (typeof prev.siteShieldsUp === "boolean") {
+      siteUp = prev.siteShieldsUp;
+    }
+    return {
+      host,
+      pageUrl: String(next.pageUrl || prev.pageUrl || ""),
+      enabled,
+      aggressive:
+        typeof next.aggressive === "boolean"
+          ? next.aggressive
+          : Boolean(prev.aggressive),
+      siteShieldsUp: siteUp,
+      blockedForHost:
+        Number(next.blockedForHost != null ? next.blockedForHost : prev.blockedForHost) ||
+        0,
+      blockedTotal:
+        Number(next.blockedTotal != null ? next.blockedTotal : prev.blockedTotal) ||
+        0,
+      allowlist: Array.isArray(next.allowlist) ? next.allowlist : prev.allowlist || [],
+    };
+  }
+
+  function fillShields(panelNode, data) {
+    panelNode.replaceChildren();
+    const state = normalizeShieldData(data, null);
+
+    const head = el("div", "omni-shield-head");
+    const site = el("div", "omni-shield-site");
+    const domainRow = el("div", "omni-shield-domain-row");
+    if (state.host) {
+      const fav = el("img", "omni-shield-favicon");
+      fav.alt = "";
+      fav.referrerPolicy = "no-referrer";
+      fav.src = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(state.host)}&sz=64`;
+      fav.addEventListener("error", () => {
+        fav.hidden = true;
+      });
+      domainRow.append(fav);
+    }
+    domainRow.append(el("div", "omni-shield-domain", state.host || "New Tab"));
+    site.append(domainRow);
+    const status = el("div", "omni-shield-status");
+    status.innerHTML = state.host
+      ? `Shields <strong>${state.siteShieldsUp ? "up" : "down"}</strong> for this site`
+      : `Shields <strong>${state.siteShieldsUp ? "up" : "down"}</strong>`;
+    site.append(status);
+    head.append(site);
+
+    const siteToggle = el("button", "omni-shield-toggle");
+    siteToggle.type = "button";
+    siteToggle.setAttribute("aria-label", "Toggle shields");
+    if (state.siteShieldsUp) {
+      siteToggle.classList.add("is-on");
+    }
+    siteToggle.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const next = await applyShieldAction("toggle-site", state);
+      fillShields(panelNode, {
+        ...normalizeShieldData(next, state),
+        pageUrl: state.pageUrl,
+        host: state.host || next.host || "",
+      });
+      requestAnimationFrame(reportSize);
+    });
+    head.append(siteToggle);
+    panelNode.append(head);
+
+    const stat = el("div", "omni-shield-stat");
+    const count = el("span", "omni-shield-stat-count", formatShieldCount(state.blockedForHost));
+    stat.append(count);
+    stat.append(el("span", "omni-shield-stat-label", "trackers, ads, and more blocked"));
+    panelNode.append(stat);
+
+    panelNode.append(el("div", "omni-shield-divider"));
+
+    const advBtn = el("button", "omni-shield-advanced-btn");
+    advBtn.type = "button";
+    advBtn.setAttribute("aria-expanded", shieldsAdvancedOpen ? "true" : "false");
+    const gear = el("span", "omni-shield-icon");
+    gear.innerHTML = ICON_GEAR;
+    const chevron = el("span", "omni-shield-chevron");
+    chevron.innerHTML = ICON_CHEVRON;
+    advBtn.append(gear, el("span", "", "Advanced options"), chevron);
+    panelNode.append(advBtn);
+
+    const adv = el("div", "omni-shield-advanced");
+    if (!shieldsAdvancedOpen) {
+      adv.hidden = true;
+    }
+
+    function makeRow(label, isOn, action) {
+      const row = el("div", "omni-shield-advanced-row");
+      row.append(el("span", "", label));
+      const t = el("button", "omni-shield-toggle");
+      t.type = "button";
+      t.setAttribute("aria-label", label);
+      if (isOn) {
+        t.classList.add("is-on");
+      }
+      t.addEventListener("click", async (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const next = await applyShieldAction(action, state);
+        fillShields(panelNode, {
+          ...normalizeShieldData(next, state),
+          pageUrl: state.pageUrl,
+          host: state.host || next.host || "",
+        });
+        requestAnimationFrame(reportSize);
+      });
+      row.append(t);
+      return row;
+    }
+
+    adv.append(makeRow("Aggressive blocking", state.aggressive, "toggle-aggressive"));
+    adv.append(makeRow("Block ads globally", state.enabled, "toggle-global"));
+    panelNode.append(adv);
+
+    advBtn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      shieldsAdvancedOpen = !shieldsAdvancedOpen;
+      adv.hidden = !shieldsAdvancedOpen;
+      advBtn.setAttribute("aria-expanded", shieldsAdvancedOpen ? "true" : "false");
+      requestAnimationFrame(reportSize);
+    });
+
+    const foot = el("div", "omni-shield-foot");
+    foot.append(
+      document.createTextNode(
+        "If this site seems broken, try Shields down. This may reduce Omni Browser’s privacy protections. "
+      )
+    );
+    const learn = el("a", "omni-shield-learn", "Learn more");
+    learn.href = "#";
+    learn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      sendCommand({ action: "open-info" });
+    });
+    foot.append(learn);
+    panelNode.append(foot);
+
+    panelNode._shieldState = state;
+  }
+
+  function patchShields(data) {
+    if (!panel || !panel.classList.contains("omni-shield")) {
+      return false;
+    }
+    const prev = panel._shieldState || {};
+    const next = normalizeShieldData(data, prev);
+    // Keep advanced open state; rebuild for reliable toggle wiring.
+    fillShields(panel, next);
+    return true;
+  }
+
+  function renderShields(payload) {
+    document.body.classList.remove("is-tab-tip", "is-history", "is-media");
+    document.body.classList.add("is-shields");
+    const data = payload || {};
+    if (panel && panel.classList.contains("omni-shield")) {
+      patchShields(data);
+      requestAnimationFrame(reportSize);
+      return;
+    }
+    lastReportW = 0;
+    lastReportH = 0;
+    shieldsAdvancedOpen = Boolean(data.advancedOpen);
+    panel = el("div", "omni-shield");
+    layout = panel;
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Ad blocking");
+    fillShields(panel, data);
+    root.replaceChildren(panel);
+    observeSize();
+    requestAnimationFrame(reportSize);
+  }
+
   function clear() {
     if (resizeObserver) {
       resizeObserver.disconnect();
@@ -487,7 +727,12 @@
     layout = null;
     lastReportW = 0;
     lastReportH = 0;
-    document.body.classList.remove("is-tab-tip", "is-history", "is-media");
+    document.body.classList.remove(
+      "is-tab-tip",
+      "is-history",
+      "is-media",
+      "is-shields"
+    );
     root.replaceChildren();
   }
 
@@ -503,6 +748,8 @@
         renderHistory(payload);
       } else if (payload.view === "media") {
         renderMedia(payload);
+      } else if (payload.view === "shields") {
+        renderShields(payload);
       }
     }
     if (msg.type === "hide") {

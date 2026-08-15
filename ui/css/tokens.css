@@ -18,6 +18,15 @@
   --font-brand: "Space Grotesk", "Segoe UI Variable Display", system-ui, sans-serif;
 }
 
+html[data-private="1"] {
+  --bg-deep: #000000;
+  --bg-titlebar: #000000;
+  --bg-panel: #050505;
+  --bg-elevated: #141414;
+  --bg-hover: #1c1c1c;
+  --stroke: #1a1a1a;
+}
+
 @font-face {
   font-family: "Inter";
   src: url("../assets/fonts/InterVariable.ttf") format("truetype");

@@ -1,10 +1,13 @@
 #include "omni/omni_app.h"
 
+#include <string>
+
 #include "include/cef_browser.h"
 #include "include/cef_command_line.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_window.h"
 #include "include/wrapper/cef_helpers.h"
+#include "omni/adblock_service.h"
 #include "omni/dev_mode.h"
 #include "omni/omni_handler.h"
 #include "omni/paths.h"
@@ -28,6 +31,9 @@ void OmniApp::OnBeforeCommandLineProcessing(
 
 void OmniApp::OnContextInitialized() {
   CEF_REQUIRE_UI_THREAD();
+
+  AdblockService::Get().Initialize();
+  AdblockService::Get().MaybeUpdateListsAsync();
 
   const bool alloy_style = true;
   const cef_runtime_style_t runtime_style = CEF_RUNTIME_STYLE_ALLOY;

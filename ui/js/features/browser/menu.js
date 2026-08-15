@@ -73,6 +73,9 @@
           }
           break;
         case "open-history":
+          if (window.OmniPrivate && OmniPrivate.enabled) {
+            break;
+          }
           if (
             window.OmniBrowser &&
             typeof OmniBrowser.openTab === "function"
@@ -135,8 +138,31 @@
           }
           break;
         case "new-private":
+          if (
+            window.OmniBridge &&
+            typeof OmniBridge.windowNewPrivate === "function"
+          ) {
+            OmniBridge.windowNewPrivate().catch(console.error);
+          }
           break;
         case "clear-data":
+          break;
+        case "adblock-changed":
+          if (
+            window.OmniAdblock &&
+            typeof OmniAdblock.applyPrefs === "function"
+          ) {
+            OmniAdblock.applyPrefs({
+              enabled: Boolean(payload.enabled),
+              aggressive: Boolean(payload.aggressive),
+            });
+          }
+          if (
+            window.OmniAdblock &&
+            typeof OmniAdblock.refresh === "function"
+          ) {
+            OmniAdblock.refresh().catch(() => {});
+          }
           break;
         case "exit":
           if (

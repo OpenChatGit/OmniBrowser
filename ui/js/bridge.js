@@ -50,6 +50,16 @@
   }
 
   window.OmniBridge = {
+    /** Generic RPC into the native ApiDispatcher. */
+    call(method, params = {}, options = {}) {
+      return nativeQuery(
+        {
+          method: String(method || ""),
+          params: params && typeof params === "object" ? params : {},
+        },
+        options
+      );
+    },
     windowMinimize() {
       return nativeQuery({ method: "window.minimize", params: {} });
     },
@@ -64,6 +74,9 @@
     },
     windowNew() {
       return nativeQuery({ method: "window.new", params: {} });
+    },
+    windowNewPrivate() {
+      return nativeQuery({ method: "window.newPrivate", params: {} });
     },
     windowCursorPos() {
       return nativeQuery({ method: "window.cursorPos", params: {} });
@@ -136,6 +149,25 @@
     },
     browserState() {
       return nativeQuery({ method: "browser.state", params: {} });
+    },
+    adblockGet(host) {
+      const params = {};
+      if (host) {
+        params.host = String(host);
+      }
+      return nativeQuery({ method: "browser.adblock.get", params });
+    },
+    adblockSet(prefs) {
+      return nativeQuery({
+        method: "browser.adblock.set",
+        params: prefs && typeof prefs === "object" ? prefs : {},
+      });
+    },
+    adblockAllowlist(host, allow = true) {
+      return nativeQuery({
+        method: "browser.adblock.allowlist",
+        params: { host: String(host || ""), allow: Boolean(allow) },
+      });
     },
     browserSetAudioMuted(muted, tabId) {
       const params = { muted: Boolean(muted) };

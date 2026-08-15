@@ -17,6 +17,9 @@
 #include "include/wrapper/cef_closure_task.h"
 #include "include/wrapper/cef_helpers.h"
 #include "include/cef_cookie.h"
+#include "omni/adblock_resource_handler.h"
+#include "omni/log.h"
+#include "omni/adblock_service.h"
 #include "omni/app_menu_button.h"
 #include "omni/dev_mode.h"
 #include "omni/download_store.h"
@@ -125,6 +128,12 @@ bool OmniHandler::IsContentBrowser(CefRefPtr<CefBrowser> browser) const {
   if (!browser) {
     return false;
   }
+  {
+    std::lock_guard<std::mutex> lock(browser_ids_mu_);
+    if (content_browser_ids_.count(browser->GetIdentifier()) > 0) {
+      return true;
+    }
+  }
   if (!TabIdForContentBrowser(browser).empty()) {
     return true;
   }
@@ -138,8 +147,124 @@ bool OmniHandler::IsContentBrowser(CefRefPtr<CefBrowser> browser) const {
   return false;
 }
 
+bool OmniHandler::ShouldFilterNetwork(CefRefPtr<CefBrowser> browser) const {
+  if (!browser) {
+    // Service worker / CefURLRequest traffic without a browser: filter it
+    // like Brave filters everything that is not app UI.
+    return true;
+  }
+  const int id = browser->GetIdentifier();
+  std::lock_guard<std::mutex> lock(browser_ids_mu_);
+  if (id == shell_browser_id_ || id == overlay_browser_id_) {
+    return false;
+  }
+  // Known content pane, or any unknown browser (popups, recycled views):
+  // default to filtering — app chrome is always registered as shell/overlay.
+  return true;
+}
+
+void OmniHandler::RegisterBrowserPane(CefRefPtr<CefBrowser> browser,
+                                      BrowserPane pane) {
+  if (!browser) {
+    return;
+  }
+  const int id = browser->GetIdentifier();
+  std::lock_guard<std::mutex> lock(browser_ids_mu_);
+  switch (pane) {
+    case BrowserPane::Shell:
+      shell_browser_id_ = id;
+      content_browser_ids_.erase(id);
+      break;
+    case BrowserPane::Overlay:
+      overlay_browser_id_ = id;
+      content_browser_ids_.erase(id);
+      break;
+    case BrowserPane::Content:
+      content_browser_ids_.insert(id);
+      break;
+  }
+}
+
+void OmniHandler::UnregisterBrowserPane(CefRefPtr<CefBrowser> browser) {
+  if (!browser) {
+    return;
+  }
+  const int id = browser->GetIdentifier();
+  std::lock_guard<std::mutex> lock(browser_ids_mu_);
+  content_browser_ids_.erase(id);
+  if (shell_browser_id_ == id) {
+    shell_browser_id_ = -1;
+  }
+  if (overlay_browser_id_ == id) {
+    overlay_browser_id_ = -1;
+  }
+}
+
+void OmniHandler::TrackBrowserIdentity(CefRefPtr<CefBrowser> browser) {
+  if (!browser) {
+    return;
+  }
+  const int id = browser->GetIdentifier();
+  std::lock_guard<std::mutex> lock(browser_ids_mu_);
+  // Prefer view-map classification on the UI thread (caller).
+  if (shell_browser_view_) {
+    if (auto shell = shell_browser_view_->GetBrowser()) {
+      if (shell->IsSame(browser)) {
+        shell_browser_id_ = id;
+        content_browser_ids_.erase(id);
+        return;
+      }
+    }
+  }
+  if (overlay_browser_view_) {
+    if (auto overlay = overlay_browser_view_->GetBrowser()) {
+      if (overlay->IsSame(browser)) {
+        overlay_browser_id_ = id;
+        content_browser_ids_.erase(id);
+        return;
+      }
+    }
+  }
+  if (!TabIdForContentBrowser(browser).empty()) {
+    content_browser_ids_.insert(id);
+    return;
+  }
+  if (unbound_content_view_) {
+    if (auto content = unbound_content_view_->GetBrowser()) {
+      if (content->IsSame(browser)) {
+        content_browser_ids_.insert(id);
+      }
+    }
+  }
+}
+
+void OmniHandler::UntrackBrowserIdentity(CefRefPtr<CefBrowser> browser) {
+  if (!browser) {
+    return;
+  }
+  const int id = browser->GetIdentifier();
+  std::lock_guard<std::mutex> lock(browser_ids_mu_);
+  content_browser_ids_.erase(id);
+  if (shell_browser_id_ == id) {
+    shell_browser_id_ = -1;
+  }
+  if (overlay_browser_id_ == id) {
+    overlay_browser_id_ = -1;
+  }
+}
+
 bool OmniHandler::IsShellBrowser(CefRefPtr<CefBrowser> browser) const {
-  if (!browser || !shell_browser_view_) {
+  if (!browser) {
+    return false;
+  }
+  const int id = browser->GetIdentifier();
+  {
+    std::lock_guard<std::mutex> lock(browser_ids_mu_);
+    if (shell_browser_id_ != -1 && id == shell_browser_id_) {
+      return true;
+    }
+  }
+  if (!shell_browser_view_) {
     return false;
   }
   auto shell = shell_browser_view_->GetBrowser();
@@ -147,7 +272,17 @@ bool OmniHandler::IsShellBrowser(CefRefPtr<CefBrowser> browser) const {
 }
 
 bool OmniHandler::IsOverlayBrowser(CefRefPtr<CefBrowser> browser) const {
-  if (!browser || !overlay_browser_view_) {
+  if (!browser) {
+    return false;
+  }
+  const int id = browser->GetIdentifier();
+  {
+    std::lock_guard<std::mutex> lock(browser_ids_mu_);
+    if (overlay_browser_id_ != -1 && id == overlay_browser_id_) {
+      return true;
+    }
+  }
+  if (!overlay_browser_view_) {
     return false;
   }
   auto overlay = overlay_browser_view_->GetBrowser();
@@ -198,6 +333,9 @@ bool OmniHandler::EnsureContentTab(const std::string& tab_id) {
   }
 
   tab_content_views_[tab_id] = view;
+  if (auto browser = view->GetBrowser()) {
+    TrackBrowserIdentity(browser);
+  }
   return true;
 }
 
@@ -326,8 +464,20 @@ bool OmniHandler::ContentNavigate(const std::string& url,
     return false;
   }
   auto browser = view->GetBrowser();
-  if (!browser) {
-    // BrowserView exists but CEF has not finished creating the browser yet.
+  CefRefPtr<CefFrame> frame = browser ? browser->GetMainFrame() : nullptr;
+  std::string current;
+  if (frame && frame->IsValid()) {
+    current = frame->GetURL().ToString();
+  }
+
+  // Seed content views start on about:blank. StopLoad()+LoadURL during that
+  // first document (session restore / direct search) crashes CEF. Queue the
+  // real URL until the browser is idle.
+  const bool booting =
+      !browser || !frame || !frame->IsValid() || current.empty() ||
+      (browser->IsLoading() && (current == "about:blank" ||
+                                current.rfind("about:", 0) == 0));
+  if (booting) {
     pending_content_urls_[id] = url;
     active_tab_id_ = id;
     content_visible_ = true;
@@ -337,12 +487,12 @@ bool OmniHandler::ContentNavigate(const std::string& url,
 
   pending_content_urls_.erase(id);
 
-  // Cancel any in-flight load so rapid navigation stays responsive.
+  // Cancel in-flight loads only after the seed document is gone.
   if (browser->IsLoading()) {
     browser->StopLoad();
   }
   // Load before revealing the pane so the previous page is never flashed.
-  browser->GetMainFrame()->LoadURL(url);
+  frame->LoadURL(url);
 
   content_visible_ = true;
   LayoutContentBrowser();
@@ -362,6 +512,23 @@ bool OmniHandler::ContentNavigate(const std::string& url,
                      }),
                      48);
   return true;
+}
+
+void OmniHandler::FlushPendingContentUrl(const std::string& tab_id) {
+  CEF_REQUIRE_UI_THREAD();
+  if (tab_id.empty()) {
+    return;
+  }
+  const auto pending = pending_content_urls_.find(tab_id);
+  if (pending == pending_content_urls_.end()) {
+    return;
+  }
+  const std::string url = pending->second;
+  if (url.empty() || url == "about:blank") {
+    pending_content_urls_.erase(pending);
+    return;
+  }
+  ContentNavigate(url, tab_id);
 }
 
 void OmniHandler::ContentGoBack() {
@@ -528,17 +695,6 @@ void OmniHandler::LayoutContentBrowser() {
 
   shell_browser_view_->InvalidateLayout();
   window->InvalidateLayout();
-
-  if (auto browser = shell_browser_view_->GetBrowser()) {
-    browser->GetHost()->WasResized();
-  }
-  if (show_content) {
-    if (auto view = ActiveContentView()) {
-      if (auto browser = view->GetBrowser()) {
-        browser->GetHost()->WasResized();
-      }
-    }
-  }
 }
 
 void OmniHandler::ApplyOverlayBounds(int height) {
@@ -1239,6 +1395,9 @@ void OmniHandler::SetContentMedia(CefRefPtr<CefBrowser> browser,
   Json event = state;
   event["type"] = "media";
   EmitBrowserEvent(event);
+
+  const bool audible = state.value("audible", playing);
+  SetContentAudioPlaying(browser, audible);
 }
 
 Json OmniHandler::ContentMediaJson(const std::string& tab_id) const {
@@ -1256,7 +1415,7 @@ bool OmniHandler::ContentMediaControl(const std::string& tab_id,
                                       const std::string& action,
                                       double value) {
   CEF_REQUIRE_UI_THREAD();
-  if (tab_id.empty() || action.empty()) {
+  if (action.empty()) {
     return false;
   }
   // Only allow known actions — values are injected as numbers.
@@ -1265,7 +1424,22 @@ bool OmniHandler::ContentMediaControl(const std::string& tab_id,
       action != "seekEnd" && action != "pip") {
     return false;
   }
-  auto view = ContentViewForTab(tab_id);
+  CefRefPtr<CefBrowserView> view = nullptr;
+  if (!tab_id.empty()) {
+    view = ContentViewForTab(tab_id);
+  }
+  if (!view && !active_tab_id_.empty()) {
+    view = ContentViewForTab(active_tab_id_);
+  }
+  if (!view && !tab_content_views_.empty()) {
+    view = tab_content_views_.begin()->second;
+  }
+  if (!view) {
+    view = content_browser_view();
+  }
+  if (!view) {
+    view = unbound_content_view_;
+  }
   if (!view) {
     return false;
   }
@@ -1277,10 +1451,32 @@ bool OmniHandler::ContentMediaControl(const std::string& tab_id,
   if (!frame || !frame->IsValid()) {
     return false;
   }
-  char script[256];
-  std::snprintf(script, sizeof(script),
-                "try{window.__omniMediaControl&&window.__omniMediaControl('%s',%f);}catch(e){}",
-                action.c_str(), value);
+  char script[1024];
+  std::snprintf(
+      script, sizeof(script),
+      "(function(){"
+      "try{"
+      "if(typeof window.__omniMediaControl==='function'){"
+      "window.__omniMediaControl('%s',%f);"
+      "return;"
+      "}"
+      "var v=document.querySelector('video,audio');"
+      "if(v){"
+      "if('%s'==='toggle'){if(v.paused){v.play();}else{v.pause();}}"
+      "else if('%s'==='play'){v.play();}"
+      "else if('%s'==='pause'){v.pause();}"
+      "}"
+      "var ytp=document.getElementById('movie_player')||document.querySelector('.html5-video-player');"
+      "if(ytp){"
+      "if('%s'==='toggle'){if(typeof ytp.getPlayerState==='function'&&ytp.getPlayerState()===1){ytp.pauseVideo();}else if(typeof ytp.playVideo==='function'){ytp.playVideo();}}"
+      "else if('%s'==='play'&&typeof ytp.playVideo==='function'){ytp.playVideo();}"
+      "else if('%s'==='pause'&&typeof ytp.pauseVideo==='function'){ytp.pauseVideo();}"
+      "}"
+      "}catch(e){}"
+      "})();",
+      action.c_str(), value,
+      action.c_str(), action.c_str(), action.c_str(),
+      action.c_str(), action.c_str(), action.c_str());
   frame->ExecuteJavaScript(script, frame->GetURL(), 0);
   return true;
 }
@@ -1323,11 +1519,12 @@ void OmniHandler::EmitBrowserEvent(const Json& event) {
 
 void OmniHandler::EmitContentEvent(CefRefPtr<CefBrowser> browser, Json event) {
   const std::string tab_id = TabIdForContentBrowser(browser);
-  if (!tab_id.empty()) {
-    event["tabId"] = tab_id;
-  } else if (!active_tab_id_.empty()) {
-    event["tabId"] = active_tab_id_;
+  if (tab_id.empty()) {
+    // Recycled/unbound views (about:blank after a tab close) must not
+    // retitle or rewrite history on the tab that is still open.
+    return;
   }
+  event["tabId"] = tab_id;
   EmitBrowserEvent(event);
 }
 
@@ -1360,6 +1557,9 @@ bool OmniHandler::OnProcessMessageReceived(
     CefProcessId source_process,
     CefRefPtr<CefProcessMessage> message) {
   CEF_REQUIRE_UI_THREAD();
+  if (!message_router_) {
+    return false;
+  }
   return message_router_->OnProcessMessageReceived(browser, frame,
                                                    source_process, message);
 }
@@ -1378,6 +1578,10 @@ void OmniHandler::OnTitleChange(CefRefPtr<CefBrowser> browser,
   }
 
   std::string display = title.ToString();
+  if (paths::IsPrivateMode() &&
+      (display.empty() || display == "Omni Browser")) {
+    display = "Omni Private";
+  }
   if (IsDevMode()) {
     display += " [dev · hot reload]";
   }
@@ -1417,7 +1621,8 @@ void OmniHandler::OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
   if (auto frame = browser->GetMainFrame()) {
     url = frame->GetURL().ToString();
     if (!isLoading) {
-      InjectScrollbarStyles(frame);
+      const std::string tab_id = TabIdForContentBrowser(browser);
+      FlushPendingContentUrl(tab_id);
     }
   }
   EmitContentEvent(browser, Json{{"type", "loading"},
@@ -1427,20 +1632,37 @@ void OmniHandler::OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
                                  {"canGoForward", canGoForward}});
 }
 
+void OmniHandler::OnLoadStart(CefRefPtr<CefBrowser> browser,
+                              CefRefPtr<CefFrame> frame,
+                              TransitionType transition_type) {
+  CEF_REQUIRE_UI_THREAD();
+  (void)transition_type;
+  // CSS-only early pass on the main frame. Scriptlets stay off in the
+  // page world (YouTube Trusted Types / CEF instability).
+  if (!IsContentBrowser(browser) || !frame || !frame->IsValid() ||
+      !frame->IsMain()) {
+    return;
+  }
+  InjectAdblockCosmetics(frame);
+}
+
 void OmniHandler::OnLoadEnd(CefRefPtr<CefBrowser> browser,
                             CefRefPtr<CefFrame> frame,
                             int httpStatusCode) {
   CEF_REQUIRE_UI_THREAD();
   (void)httpStatusCode;
-  if (!IsContentBrowser(browser) || !frame || !frame->IsMain()) {
+  if (!IsContentBrowser(browser) || !frame || !frame->IsValid() ||
+      !frame->IsMain()) {
     return;
   }
   InjectScrollbarStyles(frame);
+  InjectAdblockObservers(frame);
 }
 
 void OmniHandler::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
   browsers_.push_back(browser);
+  TrackBrowserIdentity(browser);
 
   if (!message_router_) {
     CefMessageRouterConfig config;
@@ -1461,14 +1683,7 @@ void OmniHandler::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
 
     const std::string tab_id = TabIdForContentBrowser(browser);
     if (!tab_id.empty()) {
-      const auto pending = pending_content_urls_.find(tab_id);
-      if (pending != pending_content_urls_.end()) {
-        const std::string url = pending->second;
-        pending_content_urls_.erase(pending);
-        if (!url.empty() && url != "about:blank") {
-          ContentNavigate(url, tab_id);
-        }
-      }
+      FlushPendingContentUrl(tab_id);
     }
   }
 }
@@ -1483,12 +1698,14 @@ bool OmniHandler::DoClose(CefRefPtr<CefBrowser> browser) {
 
 void OmniHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
-
   const bool was_shell = IsShellBrowser(browser);
+
   if (was_shell) {
     BeginShutdown();
     ForceCloseAuxiliaryBrowsers();
   }
+
+  UntrackBrowserIdentity(browser);
 
   for (auto it = browsers_.begin(); it != browsers_.end(); ++it) {
     if ((*it)->IsSame(browser)) {
@@ -1505,7 +1722,7 @@ void OmniHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
     }
   }
 
-  if (browsers_.empty() || (shutting_down_ && !shell_still_open)) {
+  if (shutting_down_ && (browsers_.empty() || !shell_still_open)) {
     FinishShutdown();
   }
 }
@@ -1516,6 +1733,9 @@ void OmniHandler::OnLoadError(CefRefPtr<CefBrowser> browser,
                               const CefString& errorText,
                               const CefString& failedUrl) {
   CEF_REQUIRE_UI_THREAD();
+  omni::Log("OnLoadError: url=" + std::string(failedUrl) +
+            " code=" + std::to_string(errorCode) +
+            " text=" + std::string(errorText));
   if (errorCode == ERR_ABORTED) {
     return;
   }
@@ -1605,6 +1825,27 @@ bool OmniHandler::OnBeforeBrowse(CefRefPtr<CefBrowser> browser,
   return false;
 }
 
+CefRefPtr<CefResourceRequestHandler> OmniHandler::GetResourceRequestHandler(
+    CefRefPtr<CefBrowser> browser,
+    CefRefPtr<CefFrame> frame,
+    CefRefPtr<CefRequest> request,
+    bool is_navigation,
+    bool is_download,
+    const CefString& request_initiator,
+    bool& disable_default_handling) {
+  (void)frame;
+  (void)request;
+  (void)is_navigation;
+  (void)is_download;
+  (void)request_initiator;
+  disable_default_handling = false;
+  // Must not call CefBrowserView APIs here (IO thread).
+  if (!ShouldFilterNetwork(browser)) {
+    return nullptr;
+  }
+  return new OmniAdblockResourceHandler(this);
+}
+
 bool OmniHandler::OnOpenURLFromTab(CefRefPtr<CefBrowser> browser,
                                    CefRefPtr<CefFrame> frame,
                                    const CefString& target_url,
@@ -1633,11 +1874,19 @@ void OmniHandler::OnRenderProcessTerminated(CefRefPtr<CefBrowser> browser,
                                             int error_code,
                                             const CefString& error_string) {
   CEF_REQUIRE_UI_THREAD();
-  (void)status;
-  (void)error_code;
-  (void)error_string;
+  omni::Log("OnRenderProcessTerminated: status=" + std::to_string(status) +
+            " error_code=" + std::to_string(error_code) +
+            " error_string=" + std::string(error_string));
   if (message_router_) {
     message_router_->OnRenderProcessTerminated(browser);
+  }
+  // Recover content tabs after a renderer death instead of leaving a white pane.
+  if (IsContentBrowser(browser) && browser->GetMainFrame() &&
+      browser->GetMainFrame()->IsValid()) {
+    const std::string url = browser->GetMainFrame()->GetURL().ToString();
+    if (url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0) {
+      browser->Reload();
+    }
   }
 }
 

@@ -209,6 +209,33 @@
     return `${engine.queryUrl}${encodeURIComponent(value)}`;
   }
 
+  function addressBarLabel(url) {
+    if (!url || isBlankUrl(url)) {
+      return "";
+    }
+    if (isLocalHistoryUrl(url)) {
+      return "History";
+    }
+    if (isLocalDownloadsUrl(url)) {
+      return "Downloads";
+    }
+    if (isLocalBookmarksUrl(url)) {
+      return "Bookmarks";
+    }
+    if (isLocalInfoUrl(url)) {
+      return "Info";
+    }
+    if (isLocalSearchUrl(url)) {
+      try {
+        const q = String(new URL(url).searchParams.get("q") || "").trim();
+        return q || "Search";
+      } catch (_) {
+        return "Search";
+      }
+    }
+    return url;
+  }
+
   function titleFromUrl(url) {
     if (!url || isBlankUrl(url)) {
       return "New Tab";
@@ -338,6 +365,7 @@
     isLocalBookmarksUrl,
     localInfoUrl,
     isLocalInfoUrl,
+    addressBarLabel,
     titleFromUrl,
     domainFromUrl,
     normalizeTabTitle,

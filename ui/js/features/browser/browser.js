@@ -1,6 +1,7 @@
 (() => {
   const {
     toNavigationUrl,
+    addressBarLabel,
     titleFromUrl,
     domainFromUrl,
     normalizeTabTitle,
@@ -31,6 +32,7 @@
   const HISTORY_MIGRATED_KEY = "omni.browser.historyMigrated";
   const BOOKMARKS_MIGRATED_KEY = "omni.browser.bookmarksMigrated";
   const MAX_CLOSED_TABS = 20;
+  const isPrivate = Boolean(window.OmniPrivate && OmniPrivate.enabled);
 
   function bootBrowser() {
     const root = document.getElementById("browser");
@@ -61,19 +63,11 @@
       }
     });
     const searchInput = document.getElementById("browser-search-input");
-    const searchGo = searchForm
-      ? searchForm.querySelector(".topbar-search-go")
-      : null;
-    const searchIcon = searchForm
-      ? searchForm.querySelector(".topbar-search-icon")
-      : null;
+    const searchMark = document.getElementById("browser-search-mark");
     const startForm = document.getElementById("browser-start-search-form");
     const startInput = document.getElementById("browser-start-search-input");
     const startGo = startForm
       ? startForm.querySelector(".browser-search-go")
-      : null;
-    const startIcon = startForm
-      ? startForm.querySelector(".browser-search-icon")
       : null;
     const btnBack = document.getElementById("browser-back");
     const btnForward = document.getElementById("browser-forward");
@@ -193,7 +187,10 @@
     }
 
     function isBookmarked(url) {
-      return Boolean(url && bookmarkEntries.some((entry) => entry.url === url));
+      if (!url) {
+        return false;
+      }
+      return bookmarkEntries.some((entry) => urlsMatch(entry.url, url));
     }
 
     function addBookmark(url, title) {
@@ -202,12 +199,13 @@
       }
       const cleanTitle = normalizeTabTitle(title || titleFromUrl(url), url);
       const ts = Date.now();
-      bookmarkEntries = bookmarkEntries.filter((entry) => entry.url !== url);
+      bookmarkEntries = bookmarkEntries.filter((entry) => !urlsMatch(entry.url, url));
       bookmarkEntries.unshift({ url, title: cleanTitle, ts });
       if (bookmarkEntries.length > MAX_BOOKMARKS) {
         bookmarkEntries.length = MAX_BOOKMARKS;
       }
       saveBookmarks();
+      syncBookmarkButton();
       if (
         hasNative &&
         window.OmniBridge &&
@@ -224,11 +222,12 @@
         return;
       }
       const before = bookmarkEntries.length;
-      bookmarkEntries = bookmarkEntries.filter((entry) => entry.url !== url);
+      bookmarkEntries = bookmarkEntries.filter((entry) => !urlsMatch(entry.url, url));
       if (bookmarkEntries.length === before) {
         return;
       }
       saveBookmarks();
+      syncBookmarkButton();
       if (
         hasNative &&
         window.OmniBridge &&
@@ -307,6 +306,9 @@
     }
 
     function loadVisitHistory() {
+      if (isPrivate) {
+        return [];
+      }
       try {
         const raw = localStorage.getItem(HISTORY_KEY);
         const data = raw ? JSON.parse(raw) : null;
@@ -333,6 +335,9 @@
     }
 
     function saveVisitHistory() {
+      if (isPrivate) {
+        return;
+      }
       try {
         localStorage.setItem(HISTORY_KEY, JSON.stringify(visitHistory));
       } catch (_) {
@@ -341,6 +346,9 @@
     }
 
     function loadClosedTabs() {
+      if (isPrivate) {
+        return [];
+      }
       try {
         const raw = localStorage.getItem(CLOSED_KEY);
         const data = raw ? JSON.parse(raw) : null;
@@ -356,6 +364,9 @@
     }
 
     function saveClosedTabs() {
+      if (isPrivate) {
+        return;
+      }
       try {
         localStorage.setItem(CLOSED_KEY, JSON.stringify(closedTabs));
       } catch (_) {
@@ -364,6 +375,9 @@
     }
 
     function rememberVisit(url, title) {
+      if (isPrivate) {
+        return;
+      }
       if (
         !url ||
         isBlankUrl(url) ||
@@ -396,6 +410,9 @@
     }
 
     function migrateVisitHistoryToNative() {
+      if (isPrivate) {
+        return;
+      }
       if (
         !hasNative ||
         !window.OmniBridge ||
@@ -516,6 +533,9 @@
     }
 
     function saveSession() {
+      if (isPrivate) {
+        return;
+      }
       try {
         const payload = {
           v: SESSION_VERSION,
@@ -555,6 +575,9 @@
     }
 
     function restoreSession() {
+      if (isPrivate) {
+        return false;
+      }
       try {
         const raw = localStorage.getItem(SESSION_KEY);
         if (!raw) {
@@ -593,6 +616,7 @@
               ),
               history,
               index,
+              contentLive: false,
             };
           })
           .filter(Boolean);
@@ -664,6 +688,7 @@
       engineIcon.alt = "";
       engineBtn.setAttribute("aria-label", `Search engine: ${engine.name}`);
       engineBtn.setAttribute("data-tooltip", engine.name);
+      syncSearchBarIcon();
       if (engineMenu) {
         engineMenu.querySelectorAll(".browser-engine-option").forEach((opt) => {
           const selected = opt.dataset.engineId === engine.id;
@@ -811,16 +836,34 @@
       });
     }
 
+    function isBrowserOwnedUrl(url) {
+      if (!url || isBlankUrl(url)) {
+        return true;
+      }
+      return (
+        isLocalSearchUrl(url) ||
+        isLocalHistoryUrl(url) ||
+        isLocalDownloadsUrl(url) ||
+        isLocalBookmarksUrl(url) ||
+        isLocalInfoUrl(url)
+      );
+    }
+
+    function syncSearchBarIcon() {
+      if (!searchMark) {
+        return;
+      }
+      const tab = activeTab();
+      const url = tab && tab.index >= 0 ? tab.history[tab.index] : "";
+      const useBrand = !tab || isStartTab(tab) || isBrowserOwnedUrl(url);
+      const src = useBrand ? NEW_TAB_FAVICON : getSearchEngine().icon;
+      const nextSrc = new URL(src, window.location.href).href;
+      if (searchMark.src !== nextSrc) {
+        searchMark.src = src;
+      }
+    }
+
     function mountChromeIcons() {
-      if (searchIcon) {
-        OmniIcons.mount(searchIcon, "search");
-      }
-      if (searchGo) {
-        OmniIcons.mount(searchGo, "arrow-right");
-      }
-      if (startIcon) {
-        OmniIcons.mount(startIcon, "search");
-      }
       if (startGo) {
         OmniIcons.mount(startGo, "arrow-right");
       }
@@ -915,6 +958,9 @@
           OmniBridge.browserShow(false).catch(() => {});
         }
       }
+      if (window.OmniMedia && typeof OmniMedia.syncAll === "function") {
+        OmniMedia.syncAll();
+      }
       requestAnimationFrame(syncChromeHeight);
     }
 
@@ -922,9 +968,16 @@
       if (addressEditing && document.activeElement === searchInput) {
         return;
       }
-      searchInput.value = value || "";
+      const display = addressBarLabel(value);
+      searchInput.value = display;
       if (startInput) {
-        startInput.value = value || "";
+        startInput.value = display;
+      }
+      if (
+        window.OmniAdblock &&
+        typeof OmniAdblock.refresh === "function"
+      ) {
+        OmniAdblock.refresh().catch(() => {});
       }
     }
 
@@ -1778,7 +1831,11 @@
       }
       contentAudioPlaying = Boolean(tabAudioPlaying.get(tab.id));
       contentAudioMuted = Boolean(tabAudioMuted.get(tab.id));
+      if (window.OmniMedia && typeof OmniMedia.syncAll === "function") {
+        OmniMedia.syncAll();
+      }
       syncNavButtons();
+      syncSearchBarIcon();
       renderTabs();
       scheduleSaveSession();
     }
@@ -1798,6 +1855,7 @@
       tab.title = titleFromUrl(url);
       tab.contentLive = true;
       syncSearchFields(url);
+      syncSearchBarIcon();
       root.dataset.mode = "browse";
       start.hidden = true;
       view.hidden = false;
@@ -1827,6 +1885,13 @@
     }
 
     function navigate(raw) {
+      const typed = String(raw || "").trim();
+      const current = currentUrl();
+      if (typed && typed === addressBarLabel(current) && isBrowserOwnedUrl(current)) {
+        addressEditing = false;
+        syncSearchFields(current);
+        return;
+      }
       const url = toNavigationUrl(raw);
       if (!url) {
         return;
@@ -2011,6 +2076,57 @@
       scheduleSaveSession();
     }
 
+    function restoreClosedTab(closedId) {
+      if (!closedTabs.length) {
+        return;
+      }
+      let target = null;
+      if (closedId) {
+        const idx = closedTabs.findIndex((t) => t.id === closedId);
+        if (idx >= 0) {
+          target = closedTabs.splice(idx, 1)[0];
+        }
+      }
+      if (!target) {
+        target = closedTabs.shift();
+      }
+      if (!target) {
+        return;
+      }
+      saveClosedTabs();
+      seq += 1;
+      const tab = {
+        id: `tab-${seq}`,
+        title: target.title || "New Tab",
+        history: Array.isArray(target.history) ? [...target.history] : [],
+        index: Number.isInteger(target.index) ? target.index : -1,
+        contentLive: false,
+      };
+      tabs.push(tab);
+      activeId = tab.id;
+      applyActiveTab();
+      renderTabs();
+      scheduleSaveSession();
+    }
+
+    function listHistory() {
+      return visitHistory.map((entry) => ({
+        url: entry.url,
+        title: entry.title,
+        ts: entry.ts,
+      }));
+    }
+
+    function listRecentTabs() {
+      return closedTabs.map((entry) => ({
+        id: entry.id,
+        title: entry.title,
+        history: entry.history,
+        index: entry.index,
+        ts: entry.ts,
+      }));
+    }
+
     function setDownloadProgress(percent, { active = 0, complete = false } = {}) {
       if (!btnDownload || !btnDownloadProgress) {
         return;
@@ -2083,9 +2199,15 @@
         return;
       }
       const eventTabId =
-        typeof msg.tabId === "string" && msg.tabId ? msg.tabId : activeId;
-      const tab =
-        tabs.find((entry) => entry.id === eventTabId) || activeTab();
+        typeof msg.tabId === "string" && msg.tabId ? msg.tabId : "";
+      // Never apply a closed/unknown tab's events to the active tab
+      // (about:blank after close was wiping the remaining tab's title).
+      const tab = eventTabId
+        ? tabs.find((entry) => entry.id === eventTabId)
+        : activeTab();
+      if (eventTabId && !tab) {
+        return;
+      }
       const isActiveEvent = !eventTabId || eventTabId === activeId;
 
       if (msg.type === "navigate" || msg.type === "visibility") {
@@ -2167,7 +2289,15 @@
       if (msg.type === "title" && tab && msg.title) {
         const url =
           tab.index >= 0 ? tab.history[tab.index] || "" : currentUrl();
-        if (isStartTab(tab) || isBlankUrl(msg.title)) {
+        if (isBlankUrl(msg.title) || /^about:blank$/i.test(String(msg.title))) {
+          if (isStartTab(tab) || isBlankUrl(url)) {
+            tab.title = "New Tab";
+            renderTabs();
+            scheduleSaveSession();
+          }
+          return;
+        }
+        if (isStartTab(tab)) {
           tab.title = "New Tab";
         } else {
           tab.title = normalizeTabTitle(msg.title, url);
@@ -2189,8 +2319,18 @@
         }
       }
 
-      if (msg.type === "media" && window.OmniMedia) {
-        OmniMedia.onMediaEvent(msg);
+      if (msg.type === "media") {
+        if (window.OmniMedia) {
+          OmniMedia.onMediaEvent(msg);
+        }
+        const audioTabId = eventTabId || activeId;
+        if (typeof msg.playing === "boolean") {
+          setTabAudioPlaying(audioTabId, Boolean(msg.playing));
+        }
+      }
+
+      if (msg.type === "bookmarks") {
+        pullBookmarksFromNative();
       }
 
       if (msg.type === "overlay" && msg.visible === false) {
@@ -2199,6 +2339,12 @@
         if (window.OmniMedia && typeof OmniMedia.onOverlayClosed === "function") {
           OmniMedia.onOverlayClosed();
         }
+        if (
+          window.OmniAdblock &&
+          typeof OmniAdblock.onOverlayClosed === "function"
+        ) {
+          OmniAdblock.onOverlayClosed();
+        }
         if (tabTipId && usesOverlayTabTip()) {
           tabTipId = null;
           if (tabTipTimer) {
@@ -2206,6 +2352,10 @@
             tabTipTimer = 0;
           }
         }
+      }
+
+      if (isActiveEvent) {
+        syncSearchBarIcon();
       }
     }
 
@@ -2468,6 +2618,12 @@
         pullBookmarksFromNative();
       }
     });
+    window.addEventListener("storage", (event) => {
+      if (event && event.key === BOOKMARKS_KEY) {
+        bookmarkEntries = loadBookmarks();
+        syncBookmarkButton();
+      }
+    });
 
     const bootPending =
       hasNative && typeof OmniBridge.tabConsumePending === "function"
@@ -2482,7 +2638,9 @@
         return;
       }
       if (restoreSession()) {
-        applyActiveTab();
+        // Let the seed content browser finish OnAfterCreated before LoadURL.
+        // Immediate restore of YouTube (or similar) raced CEF and crashed.
+        window.setTimeout(() => applyActiveTab(), 150);
       } else {
         openTab();
       }
@@ -2492,7 +2650,10 @@
       navigate,
       goHome,
       openTab,
+      activateTab,
+      closeTab,
       syncChromeHeight,
+      getCurrentUrl: currentUrl,
       releaseTabTip: releaseTabTipOverlay,
       listBookmarks() {
         return bookmarkEntries.map((entry) => ({

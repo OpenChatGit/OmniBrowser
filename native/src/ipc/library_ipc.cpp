@@ -1,19 +1,18 @@
 #include "omni/library_ipc.h"
 
 #include "include/wrapper/cef_helpers.h"
-#include "omni/browser_commands.h"
-#include "omni/git_commands.h"
-#include "omni/library_commands.h"
+#include "omni/api/api_dispatcher.h"
+#include "omni/api/register_apis.h"
 #include "omni/omni_handler.h"
-#include "omni/terminal_commands.h"
-#include "omni/window_commands.h"
 
 namespace omni {
 namespace {
 
 class LibraryIpcHandler : public CefMessageRouterBrowserSide::Handler {
  public:
-  explicit LibraryIpcHandler(OmniHandler* owner) : owner_(owner) {}
+  explicit LibraryIpcHandler(OmniHandler* owner) : owner_(owner) {
+    RegisterAllApis();
+  }
 
   bool OnQuery(CefRefPtr<CefBrowser> browser,
                CefRefPtr<CefFrame> frame,
@@ -35,25 +34,18 @@ class LibraryIpcHandler : public CefMessageRouterBrowserSide::Handler {
                             ? req["params"]
                             : Json::object();
 
-    if (HandleLibraryCommand(owner_, method, params, callback)) {
-      return true;
-    }
-    if (HandleWindowCommand(browser, method, params, callback)) {
-      return true;
-    }
-    if (HandleTerminalCommand(owner_, query_id, persistent, method, params,
-                              callback)) {
-      return true;
-    }
-    if (HandleGitCommand(method, params, callback)) {
-      return true;
-    }
-    if (HandleBrowserCommand(owner_, browser, query_id, persistent, method,
-                             params, callback)) {
-      return true;
-    }
+    ApiContext ctx;
+    ctx.owner = owner_;
+    ctx.browser = browser;
+    ctx.method = method;
+    ctx.query_id = query_id;
+    ctx.persistent = persistent;
+    ctx.cef_callback = callback;
 
-    callback->Failure(404, "Unknown method: " + method);
+    CefApiResponder responder(callback);
+    if (!ApiDispatcher::Get().Dispatch(method, ctx, params, responder)) {
+      callback->Failure(404, "Unknown method: " + method);
+    }
     return true;
   }
 

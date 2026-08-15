@@ -29,12 +29,23 @@ std::string EnsureUserDownloadsDir();
 void SetProfileInstanceId(const std::string& id);
 std::string ProfileInstanceId();
 
+// Private window: isolated CEF profile, no visit history, wiped on exit.
+void SetPrivateMode(bool on);
+bool IsPrivateMode();
+void WipePrivateProfile();
+
 // CEF profile root (cookies, localStorage, history disk state).
 std::string CacheRootDir();
 std::string EnsureCacheRootDir();
 
 // Directory that contains index.html (repo ui/ in dev, exe/ui in release).
 std::string UiRootDir();
+
+// Adblock-rust filter lists / prefs under AppData and bundled defaults.
+std::string AdblockDir();
+std::string EnsureAdblockDir();
+std::string AdblockPrefsPath();
+std::string BundledAdblockDir();
 
 // file:/// URL to index.html
 std::string UiEntryUrl();

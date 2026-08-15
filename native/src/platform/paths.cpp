@@ -15,6 +15,7 @@ namespace omni::paths {
 namespace {
 
 std::string g_profile_instance_id;
+bool g_private_mode = false;
 
 std::string SanitizeInstanceId(const std::string& raw) {
   std::string out;
@@ -115,6 +116,25 @@ std::string ProfileInstanceId() {
   return g_profile_instance_id;
 }
 
+void SetPrivateMode(bool on) {
+  g_private_mode = on;
+}
+
+bool IsPrivateMode() {
+  return g_private_mode;
+}
+
+void WipePrivateProfile() {
+  if (!g_private_mode || g_profile_instance_id.empty()) {
+    return;
+  }
+  std::error_code ec;
+  std::filesystem::remove_all(
+      std::filesystem::path(utf8::Widen(AppDataDir() + "\\instances\\" +
+                                        g_profile_instance_id)),
+      ec);
+}
+
 std::string CacheRootDir() {
   if (!g_profile_instance_id.empty()) {
     return AppDataDir() + "\\instances\\" + g_profile_instance_id + "\\cef";
@@ -160,13 +180,50 @@ std::string UiRootDir() {
 std::string UiEntryUrl() {
   const std::filesystem::path index =
       std::filesystem::path(utf8::Widen(UiRootDir())) / L"index.html";
-  return PathToFileUrl(utf8::Narrow(index.wstring()));
+  std::string url = PathToFileUrl(utf8::Narrow(index.wstring()));
+  if (IsPrivateMode()) {
+    url += "?private=1";
+  }
+  return url;
 }
 
 std::string UiOverlayUrl() {
   const std::filesystem::path overlay =
       std::filesystem::path(utf8::Widen(UiRootDir())) / L"overlay.html";
   return PathToFileUrl(utf8::Narrow(overlay.wstring()));
+}
+
+std::string AdblockDir() {
+  return AppDataDir() + "\\adblock";
+}
+
+std::string EnsureAdblockDir() {
+  const std::string dir = AdblockDir();
+  std::error_code ec;
+  std::filesystem::create_directories(
+      std::filesystem::path(utf8::Widen(dir)), ec);
+  return dir;
+}
+
+std::string AdblockPrefsPath() {
+  return EnsureAdblockDir() + "\\prefs.json";
+}
+
+std::string BundledAdblockDir() {
+  // Prefer next-to-exe copy (POST_BUILD). Fall back to repo resources/adblock.
+  const auto beside_exe =
+      std::filesystem::path(utf8::Widen(ExecutableDir())) / L"adblock";
+  std::error_code ec;
+  if (std::filesystem::exists(beside_exe / "omni-baseline.txt", ec)) {
+    return utf8::Narrow(beside_exe.wstring());
+  }
+  const auto from_ui =
+      std::filesystem::path(utf8::Widen(UiRootDir())).parent_path() /
+      L"resources" / L"adblock";
+  if (std::filesystem::exists(from_ui / "omni-baseline.txt", ec)) {
+    return utf8::Narrow(from_ui.wstring());
+  }
+  return utf8::Narrow(beside_exe.wstring());
 }
 
 }  // namespace omni::paths

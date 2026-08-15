@@ -1,12 +1,67 @@
 #include "omni/scrollbar_inject.h"
 
+#include <cstdio>
+#include <sstream>
+
+#include "omni/adblock_service.h"
+
 namespace omni {
+namespace {
+
+std::string JsEscape(const std::string& input) {
+  std::string out;
+  out.reserve(input.size() + 16);
+  for (char c : input) {
+    switch (c) {
+      case '\\':
+        out += "\\\\";
+        break;
+      case '\'':
+        out += "\\'";
+        break;
+      case '\n':
+        out += "\\n";
+        break;
+      case '\r':
+        out += "\\r";
+        break;
+      case '\t':
+        out += "\\t";
+        break;
+      case '<':
+        // Avoid breaking out of script tags in edge cases.
+        out += "\\x3c";
+        break;
+      default:
+        out.push_back(c);
+        break;
+    }
+  }
+  return out;
+}
+
+// Never append <style> to `document`, and never synthesize <html>.
+// - document.appendChild(style) can make STYLE the documentElement (page dies).
+// - createElement('html') + appendChild can block the real navigation document
+//   from parsing (empty <html> with only our styles → white screen).
+constexpr const char* kOmniStyleParentJs =
+    "function omniStyleParent(){"
+    "var de=document.documentElement;"
+    "if(de&&de.tagName==='HTML')return document.head||de;"
+    "if(document.head)return document.head;"
+    "return null;"
+    "}";
+
+}  // namespace
 
 void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
   if (!frame || !frame->IsValid()) {
     return;
   }
-
+  const std::string url = frame->GetURL().ToString();
+  if (url.rfind("http://", 0) != 0 && url.rfind("https://", 0) != 0) {
+    return;
+  }
   static const char* kScript = R"JS(
 (function () {
   try {
@@ -25,7 +80,10 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
       s.id = 'omni-scrollbar-style';
       s.type = 'text/css';
       s.appendChild(document.createTextNode(css));
-      var root = document.head || document.documentElement || document.body;
+      var root = document.head ||
+        (document.documentElement && document.documentElement.tagName === 'HTML'
+          ? document.documentElement : null) ||
+        document.body;
       if (root) root.appendChild(s);
     }
   } catch (e) {}
@@ -34,11 +92,6 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
     if (window.__omniAudioProbe) return;
     window.__omniAudioProbe = true;
     var lastKey = '';
-    var touched = new WeakSet();
-
-    function markTouched(el) {
-      try { touched.add(el); } catch (e) {}
-    }
 
     function isUsable(el) {
       if (!el) return false;
@@ -49,13 +102,52 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
       return true;
     }
 
+    // YouTube/home tiles play a muted clip on mouseenter. That is not a
+    // media session and must not raise the toolbar music button.
+    function isHoverPreview(el) {
+      if (!el || el.tagName !== 'VIDEO') return false;
+      try {
+        if (el.closest(
+          'ytd-video-preview,#video-preview,#video-preview-container,' +
+          '#inline-preview-player,ytd-inline-playback-renderer,' +
+          '.ytp-inline-preview-ui,ytd-moving-thumbnail-renderer,' +
+          'ytd-thumbnail-overlay-loading-preview-renderer'
+        )) {
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    function isMainPlayer(el) {
+      if (!el) return false;
+      if (el.tagName === 'AUDIO') return true;
+      try {
+        if (el.classList && el.classList.contains('html5-main-video')) {
+          return true;
+        }
+        if (el.closest('#movie_player,ytd-watch-flexy #ytd-player,ytd-watch-flexy')) {
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    function isSessionMedia(el) {
+      if (!el || !isUsable(el) || isHoverPreview(el)) return false;
+      if (el.tagName === 'AUDIO') return true;
+      if (isMainPlayer(el)) return true;
+      // Unmuted playback = the user is actually listening.
+      if (!el.muted && el.volume > 0) return true;
+      return false;
+    }
+
     function score(el) {
-      if (!el || !isUsable(el)) return -1;
+      if (!isSessionMedia(el)) return -1;
       var s = 0;
       if (!el.paused) s += 100;
       if (el.tagName === 'VIDEO') s += 20;
       if (!el.muted && el.volume > 0) s += 10;
-      try { if (touched.has(el)) s += 5; } catch (e) {}
       if (el.duration && isFinite(el.duration)) s += 2;
       return s;
     }
@@ -131,7 +223,6 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
       var kind = '';
 
       if (el) {
-        markTouched(el);
         playing = !el.paused && !el.ended;
         paused = el.paused;
         active = playing || (!el.ended && (el.currentTime > 0.2 ||
@@ -154,16 +245,16 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
         if (meta.title) title = meta.title;
         if (meta.artist) artist = meta.artist;
         if (meta.artwork) artwork = meta.artwork;
-        if (meta.playbackState === 'playing') {
+        // mediaSession alone is not enough: hover tiles can leave stale
+        // metadata. Only promote a session when we have real media.
+        if (el && meta.playbackState === 'playing') {
           playing = true;
           paused = false;
           active = true;
-        } else if (meta.playbackState === 'paused') {
+        } else if (el && meta.playbackState === 'paused') {
           active = true;
-          if (!el) {
-            playing = false;
-            paused = true;
-          }
+          playing = false;
+          paused = true;
         }
       }
 
@@ -180,8 +271,7 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
       }
 
       return {
-        playing: !!(playingAudible || (el && !el.paused && !el.ended) ||
-          (meta && meta.playbackState === 'playing')),
+        playing: !!(playingAudible || (el && !el.paused && !el.ended)),
         audible: playingAudible,
         paused: paused,
         active: active,
@@ -197,7 +287,20 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
       };
     }
 
-    function report() {
+    // Poll only. YouTube preview tiles flood play/pause/timeupdate; wiring
+    // those to cefQuery killed the browser process.
+    var REPORT_MS = 2500;
+    var reportTimer = null;
+
+    function report(force) {
+      if (reportTimer) return;
+      reportTimer = setTimeout(function () {
+        reportTimer = null;
+        flushReport(!!force);
+      }, force ? 60 : 0);
+    }
+
+    function flushReport(force) {
       if (typeof window.cefQuery !== 'function') return;
       var state = snapshot();
       var key = [
@@ -205,7 +308,7 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
         state.playing ? '1' : '0',
         state.audible ? '1' : '0',
         state.paused ? '1' : '0',
-        Math.floor(state.currentTime * 2),
+        Math.floor(state.currentTime / 5),
         Math.floor(state.duration),
         state.title,
         state.artist,
@@ -213,7 +316,7 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
         state.origin,
         state.canPip ? '1' : '0'
       ].join('|');
-      if (key === lastKey) return;
+      if (!force && key === lastKey) return;
       lastKey = key;
       window.cefQuery({
         request: JSON.stringify({
@@ -224,16 +327,29 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
         onSuccess: function () {},
         onFailure: function () {}
       });
-      // Keep legacy audible signal for tab mute badges.
-      window.cefQuery({
-        request: JSON.stringify({
-          method: 'browser.audio',
-          params: { playing: !!state.audible }
-        }),
-        persistent: false,
-        onSuccess: function () {},
-        onFailure: function () {}
-      });
+    }
+
+    function playMedia(target) {
+      if (target) {
+        try {
+          var p = target.play();
+          if (p && typeof p.catch === 'function') p.catch(function () {});
+        } catch (e) {}
+      }
+      try {
+        var ytp = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+        if (ytp && typeof ytp.playVideo === 'function') ytp.playVideo();
+      } catch (e) {}
+    }
+
+    function pauseMedia(target) {
+      if (target) {
+        try { target.pause(); } catch (e) {}
+      }
+      try {
+        var ytp = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+        if (ytp && typeof ytp.pauseVideo === 'function') ytp.pauseVideo();
+      } catch (e) {}
     }
 
     window.__omniMediaControl = function (action, value) {
@@ -243,27 +359,32 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
       if (!isFinite(num)) num = 0;
       try {
         if (act === 'toggle') {
-          if (!el) return false;
-          if (el.paused) el.play();
-          else el.pause();
-          report();
+          if (el) {
+            if (el.paused) playMedia(el);
+            else pauseMedia(el);
+          } else {
+            var ytp = document.getElementById('movie_player') || document.querySelector('.html5-video-player');
+            if (ytp && typeof ytp.getPlayerState === 'function') {
+              if (ytp.getPlayerState() === 1) pauseMedia(null);
+              else playMedia(null);
+            }
+          }
+          setTimeout(function () { report(true); }, 80);
           return true;
         }
         if (act === 'play') {
-          if (!el) return false;
-          el.play();
-          report();
+          playMedia(el);
+          setTimeout(function () { report(true); }, 80);
           return true;
         }
         if (act === 'pause') {
-          if (!el) return false;
-          el.pause();
-          report();
+          pauseMedia(el);
+          setTimeout(function () { report(true); }, 80);
           return true;
         }
         if (act === 'seek' && el && isFinite(el.duration)) {
           el.currentTime = Math.max(0, Math.min(el.duration, num));
-          report();
+          report(true);
           return true;
         }
         if (act === 'seekRelative' && el) {
@@ -274,17 +395,17 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
             next = Math.max(0, next);
           }
           el.currentTime = next;
-          report();
+          report(true);
           return true;
         }
         if (act === 'seekStart' && el) {
           el.currentTime = 0;
-          report();
+          report(true);
           return true;
         }
         if (act === 'seekEnd' && el && isFinite(el.duration)) {
           el.currentTime = Math.max(0, el.duration - 0.05);
-          report();
+          report(true);
           return true;
         }
         if (act === 'pip' && el && el.tagName === 'VIDEO') {
@@ -293,32 +414,421 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
           } else if (document.pictureInPictureEnabled) {
             el.requestPictureInPicture();
           }
-          report();
+          report(true);
           return true;
         }
       } catch (e) {}
       return false;
     };
 
-    document.addEventListener('play', function (ev) {
-      markTouched(ev.target);
-      report();
-    }, true);
-    document.addEventListener('playing', report, true);
-    document.addEventListener('pause', report, true);
-    document.addEventListener('ended', report, true);
-    document.addEventListener('volumechange', report, true);
-    document.addEventListener('timeupdate', report, true);
-    document.addEventListener('loadedmetadata', report, true);
-    document.addEventListener('enterpictureinpicture', report, true);
-    document.addEventListener('leavepictureinpicture', report, true);
-    setInterval(report, 1000);
-    report();
+    setTimeout(function () {
+      report(false);
+      setInterval(function () { report(false); }, REPORT_MS);
+    }, REPORT_MS);
   } catch (e) {}
 })();
 )JS";
 
   frame->ExecuteJavaScript(kScript, frame->GetURL(), 0);
+}
+
+void InjectAdblockCosmeticCss(CefRefPtr<CefFrame> frame,
+                              const std::string& hide_css) {
+  if (!frame || !frame->IsValid() || hide_css.empty()) {
+    return;
+  }
+  // Chunk large EasyList sheets so one giant JS string cannot fail silently.
+  std::ostringstream js;
+  js << "(function(){try{"
+     << kOmniStyleParentJs
+     << "var id='omni-adblock-css';"
+     << "var parts=[";
+  constexpr size_t kChunk = 12000;
+  for (size_t i = 0; i < hide_css.size(); i += kChunk) {
+    if (i) {
+      js << ',';
+    }
+    js << '\'' << JsEscape(hide_css.substr(i, kChunk)) << '\'';
+  }
+  js << "];var css=parts.join('');"
+     << "var key=String(css.length);"
+     << "function apply(){"
+     << "var parent=omniStyleParent();if(!parent)return false;"
+     << "var s=document.getElementById(id);"
+     << "if(!s){s=document.createElement('style');s.id=id;"
+     << "s.type='text/css';parent.appendChild(s);}"
+     << "if(s.dataset.omniCss!==key){s.dataset.omniCss=key;s.textContent=css;}"
+     << "return true;}"
+     << "if(apply())return;"
+     << "var mo=new MutationObserver(function(){if(apply())mo.disconnect();});"
+     << "mo.observe(document,{childList:true});"
+     << "}catch(e){}})();";
+  frame->ExecuteJavaScript(js.str(), frame->GetURL(), 0);
+}
+
+void InjectYoutubePlayerAdStrip(CefRefPtr<CefFrame> frame) {
+  if (!frame || !frame->IsValid()) {
+    return;
+  }
+  // Brave/uBO block in-player ads by pruning player JSON (scriptlets /
+  // $replace). We do the same with a tiny YouTube-only hook — not the full
+  // uBO scriptlet bundle that destabilized CEF.
+  static const char* kScript = R"JS(
+(function(){
+  try {
+    if (window.__omniYtAdStrip) return;
+    window.__omniYtAdStrip = 1;
+    function stripObj(o){
+      if (!o || typeof o !== 'object') return o;
+      try { delete o.adPlacements; } catch (e) {}
+      try { delete o.playerAds; } catch (e) {}
+      try { delete o.adSlots; } catch (e) {}
+      return o;
+    }
+    try {
+      if (window.ytInitialPlayerResponse) {
+        stripObj(window.ytInitialPlayerResponse);
+      }
+    } catch (e) {}
+    try {
+      var cur = window.ytInitialPlayerResponse;
+      Object.defineProperty(window, 'ytInitialPlayerResponse', {
+        configurable: true,
+        enumerable: true,
+        get: function(){ return cur; },
+        set: function(v){ cur = stripObj(v); }
+      });
+    } catch (e) {}
+  } catch (e) {}
+})();
+)JS";
+  frame->ExecuteJavaScript(kScript, frame->GetURL(), 0);
+
+  std::ostringstream css_js;
+  css_js << "(function(){try{"
+         << kOmniStyleParentJs
+         << "var id='omni-adblock-yt-css';"
+         << "var css='ytd-ad-slot-renderer,ytd-promoted-sparkles-web-renderer,"
+         << "ytd-in-feed-ad-layout-renderer,ytd-display-ad-renderer,#masthead-ad,"
+         << "ytd-rich-item-renderer:has(> ytd-ad-slot-renderer),"
+         << "ytd-rich-item-renderer:has(> #content > ytd-ad-slot-renderer),"
+         << ".ytp-ad-overlay-container,.ytp-ad-image-overlay{"
+         << "display:none!important;height:0!important;min-height:0!important;"
+         << "margin:0!important;padding:0!important;overflow:hidden!important}';"
+         << "function apply(){var p=omniStyleParent();if(!p)return false;"
+         << "if(document.getElementById(id))return true;"
+         << "var s=document.createElement('style');s.id=id;s.type='text/css';"
+         << "s.textContent=css;p.appendChild(s);return true;}"
+         << "if(apply())return;"
+         << "var mo=new MutationObserver(function(){if(apply())mo.disconnect();});"
+         << "mo.observe(document,{childList:true});"
+         << "}catch(e){}})();";
+  frame->ExecuteJavaScript(css_js.str(), frame->GetURL(), 0);
+}
+
+void InjectAdblockScriptletsBrave(CefRefPtr<CefFrame> frame,
+                                  const std::string& injected_script) {
+  if (!frame || !frame->IsValid() || injected_script.empty()) {
+    return;
+  }
+  // Mirrors brave-core GetScriptletGlobalsScript + scriptlet body.
+  // Brave injects via isolated-world bootstrap that creates a <script> tag;
+  // YouTube's Trusted Types blocks that DOM path in CEF. ExecuteJavaScript
+  // runs the same page-world payload without touching HTMLScriptElement.
+  // JSON-escape the body and eval via Function so a single bad scriptlet
+  // cannot create a parse error that aborts the whole wrapper.
+  std::ostringstream quoted;
+  quoted << '"';
+  for (unsigned char c : injected_script) {
+    switch (c) {
+      case '\\':
+        quoted << "\\\\";
+        break;
+      case '"':
+        quoted << "\\\"";
+        break;
+      case '\n':
+        quoted << "\\n";
+        break;
+      case '\r':
+        quoted << "\\r";
+        break;
+      case '\t':
+        quoted << "\\t";
+        break;
+      case '\b':
+        quoted << "\\b";
+        break;
+      case '\f':
+        quoted << "\\f";
+        break;
+      default:
+        if (c < 0x20) {
+          char buf[8];
+          std::snprintf(buf, sizeof(buf), "\\u%04x", c);
+          quoted << buf;
+        } else {
+          quoted << static_cast<char>(c);
+        }
+        break;
+    }
+  }
+  quoted << '"';
+
+  std::ostringstream js;
+  js << "(function(){"
+     << "if(window.__omniAdblockScriptlets)return;"
+     << "window.__omniAdblockScriptlets=1;"
+     << "try{"
+     << "const scriptletGlobals=(()=>{"
+     << "const forwardedMapMethods=['has','get','set'];"
+     << "const handler={"
+     << "get(target,prop){"
+     << "if(forwardedMapMethods.includes(prop)){"
+     << "return Map.prototype[prop].bind(target)}"
+     << "return target.get(prop)},"
+     << "set(target,prop,value){"
+     << "if(!forwardedMapMethods.includes(prop)){target.set(prop,value)}"
+     << "}"
+     << "};"
+     << "return new Proxy(new Map(),handler)"
+     << "})();"
+     << "let deAmpEnabled=false;"
+     << "(new Function('scriptletGlobals','deAmpEnabled'," << quoted.str()
+     << "))(scriptletGlobals,deAmpEnabled);"
+     << "}catch(e){}"
+     << "})();";
+  frame->ExecuteJavaScript(js.str(), frame->GetURL(), 0);
+}
+
+void InjectAdblockGenericObserver(CefRefPtr<CefFrame> frame,
+                                  const std::string& exceptions_json,
+                                  bool generichide) {
+  if (!frame || !frame->IsValid() || generichide) {
+    return;
+  }
+  // Brave content_cosmetic bundle uses cf_worker.hiddenClassIdSelectors via
+  // isolated world. CEF approximation: MutationObserver + cefQuery.
+  const std::string exceptions =
+      exceptions_json.empty() ? "[]" : exceptions_json;
+  std::ostringstream gen;
+  gen << "(function(){try{"
+      << "if(window.__omniAdblockGeneric)return;"
+      << "window.__omniAdblockGeneric=1;"
+      << "var exceptions=" << exceptions << ";"
+      << "if(typeof exceptions==='string'){try{exceptions=JSON.parse(exceptions)}"
+      << "catch(e){exceptions=[]}}"
+      << "var seenC=Object.create(null),seenI=Object.create(null);"
+      << "var pendingC=[],pendingI=[],timer=null;"
+      << kOmniStyleParentJs
+      << "function applyCss(css){if(!css)return;var id='omni-adblock-generic-css';"
+      << "var parent=omniStyleParent();if(!parent)return;"
+      << "var s=document.getElementById(id);if(!s){s=document.createElement('style');"
+      << "s.id=id;s.type='text/css';parent.appendChild(s);}"
+      << "s.textContent=(s.textContent||'')+css;}"
+      << "function flush(){timer=null;if(!pendingC.length&&!pendingI.length)return;"
+      << "var classes=pendingC.splice(0,250),ids=pendingI.splice(0,250);"
+      << "if(pendingC.length||pendingI.length)schedule();"
+      << "if(typeof window.cefQuery!=='function')return;"
+      << "window.cefQuery({request:JSON.stringify({method:'browser.adblock.classId',"
+      << "params:{classes:classes,ids:ids,exceptions:exceptions}}),"
+      << "onSuccess:function(r){try{var o=JSON.parse(r||'{}');applyCss(o.hideCss||'')}"
+      << "catch(e){}},onFailure:function(){}})}"
+      << "function schedule(){if(timer)return;timer=setTimeout(flush,120)}"
+      << "function noteEl(el){if(!el||el.nodeType!==1)return;"
+      << "if(el.id&&!seenI[el.id]){seenI[el.id]=1;pendingI.push(el.id)}"
+      << "var cn=el.classList;if(!cn)return;for(var i=0;i<cn.length;i++){"
+      << "var c=cn[i];if(c&&!seenC[c]){seenC[c]=1;pendingC.push(c)}}}"
+      << "function scan(root){if(!root)return;noteEl(root);"
+      << "var all=root.querySelectorAll?root.querySelectorAll('[id], [class]'):[];"
+      << "for(var i=0;i<all.length;i++)noteEl(all[i]);schedule()}"
+      << "function boot(){"
+      << "scan(document.documentElement);"
+      << "if(typeof MutationObserver==='undefined')return;"
+      << "new MutationObserver(function(muts){for(var i=0;i<muts.length;i++){"
+      << "var m=muts[i];if(m.type==='attributes'){noteEl(m.target);schedule();continue}"
+      << "var nodes=m.addedNodes;for(var j=0;j<nodes.length;j++)scan(nodes[j])}})"
+      << ".observe(document.documentElement,{childList:true,subtree:true,"
+      << "attributes:true,attributeFilter:['class','id']});}"
+      << "var idle=window.requestIdleCallback||function(cb){setTimeout(cb,400)};"
+      << "idle(boot,{timeout:800});"
+      << "}catch(e){}})();";
+  frame->ExecuteJavaScript(gen.str(), frame->GetURL(), 0);
+}
+
+void InjectAdblockSlotCollapse(CefRefPtr<CefFrame> frame) {
+  if (!frame || !frame->IsValid()) {
+    return;
+  }
+  // Hide cancelled ad frames/images and collapse empty wrappers (YouTube
+  // grid cards, adsbygoogle ins, reserved min-height slots). No cefQuery.
+  static const char* kScript = R"JS(
+(function(){
+  try {
+    if (window.__omniAdblockCollapse) return;
+    window.__omniAdblockCollapse = 1;
+    var AD_SRC = /doubleclick|googlesyndication|googleadservices|adservice\.google|pagead2\.|adnxs\.|adsrvr\.|amazon-adsystem|taboola\.|outbrain\.|criteo\.|rubiconproject|pubmatic\.|openx\.|casalemedia|2mdn\.|moatads|adsafeprotected|googletagservices|googleadservices/i;
+    var YT_AD = /^(YTD-AD-SLOT-RENDERER|YTD-PROMOTED-SPARKLES-WEB-RENDERER|YTD-IN-FEED-AD-LAYOUT-RENDERER|YTD-DISPLAY-AD-RENDERER|YTD-PROMOTED-VIDEO-RENDERER|YTD-AD-SLOT-RENDERER)$/;
+    var YT_CARD = /^(YTD-RICH-ITEM-RENDERER|YTD-REEL-VIDEO-RENDERER)$/;
+
+    function hideBox(el){
+      if (!el || el.nodeType !== 1 || el.__omniHide) return;
+      el.__omniHide = 1;
+      el.style.setProperty('display','none','important');
+      el.style.setProperty('height','0','important');
+      el.style.setProperty('min-height','0','important');
+      el.style.setProperty('max-height','0','important');
+      el.style.setProperty('margin','0','important');
+      el.style.setProperty('padding','0','important');
+      el.style.setProperty('overflow','hidden','important');
+      el.style.setProperty('border','0','important');
+      try { el.setAttribute('hidden',''); } catch (e) {}
+    }
+
+    function srcOf(el){
+      return el.currentSrc || el.src || el.getAttribute('src') ||
+             el.getAttribute('data-src') || '';
+    }
+
+    function isAdFrame(el){
+      var tag = el.localName || '';
+      if (tag !== 'iframe' && tag !== 'img' && tag !== 'video' && tag !== 'embed') {
+        return false;
+      }
+      return AD_SRC.test(srcOf(el));
+    }
+
+    function isAdSlot(el){
+      if (!el || el.nodeType !== 1) return false;
+      if (YT_AD.test(el.tagName) || el.id === 'masthead-ad') return true;
+      if ((el.localName || '') === 'ins' && el.classList &&
+          el.classList.contains('adsbygoogle')) return true;
+      var id = el.id || '';
+      return id.indexOf('google_ads_') === 0 || id.indexOf('div-gpt-ad') === 0;
+    }
+
+    function collapseParents(el){
+      var p = el.parentElement;
+      var n = 0;
+      while (p && n < 3 && p !== document.body && p !== document.documentElement) {
+        if (YT_CARD.test(p.tagName) || isAdSlot(p)) {
+          hideBox(p);
+          p = p.parentElement;
+          n++;
+          continue;
+        }
+        break;
+      }
+    }
+
+    function consider(el){
+      if (!el || el.nodeType !== 1) return;
+      if (isAdSlot(el) || isAdFrame(el)) {
+        hideBox(el);
+        collapseParents(el);
+      }
+    }
+
+    function scan(root){
+      if (!root) return;
+      consider(root);
+      if (!root.querySelectorAll) return;
+      var nodes = root.querySelectorAll(
+        'iframe,img,ins.adsbygoogle,#masthead-ad,ytd-ad-slot-renderer,' +
+        'ytd-promoted-sparkles-web-renderer,ytd-in-feed-ad-layout-renderer,' +
+        'ytd-display-ad-renderer,[id^="google_ads_"],[id^="div-gpt-ad"]');
+      for (var i = 0; i < nodes.length; i++) consider(nodes[i]);
+    }
+
+    document.addEventListener('error', function(e){
+      var t = e.target;
+      if (!t || !t.tagName) return;
+      var tag = t.tagName;
+      if (tag !== 'IMG' && tag !== 'IFRAME' && tag !== 'VIDEO' && tag !== 'EMBED') {
+        return;
+      }
+      if (isAdFrame(t) || isAdSlot(t) || isAdSlot(t.parentElement)) {
+        hideBox(t);
+        collapseParents(t);
+      }
+    }, true);
+
+    var timer = null;
+    var pending = [];
+    function flush(){
+      timer = null;
+      var list = pending;
+      pending = [];
+      for (var i = 0; i < list.length; i++) scan(list[i]);
+    }
+    function schedule(node){
+      pending.push(node);
+      if (timer) return;
+      timer = setTimeout(flush, 80);
+    }
+
+    function boot(){
+      scan(document.documentElement);
+      if (typeof MutationObserver === 'undefined') return;
+      new MutationObserver(function(muts){
+        for (var i = 0; i < muts.length; i++) {
+          var m = muts[i];
+          if (m.type === 'attributes') { consider(m.target); continue; }
+          var nodes = m.addedNodes;
+          for (var j = 0; j < nodes.length; j++) schedule(nodes[j]);
+        }
+      }).observe(document.documentElement || document, {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['src']
+      });
+    }
+
+    var idle = window.requestIdleCallback || function (cb) { setTimeout(cb, 400); };
+    idle(boot, { timeout: 800 });
+  } catch (e) {}
+})();
+)JS";
+  frame->ExecuteJavaScript(kScript, frame->GetURL(), 0);
+}
+
+bool IsHttpContentUrl(const std::string& url) {
+  return url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0;
+}
+
+void InjectAdblockCosmetics(CefRefPtr<CefFrame> frame) {
+  if (!frame || !frame->IsValid()) {
+    return;
+  }
+  const std::string url = frame->GetURL().ToString();
+  if (!IsHttpContentUrl(url)) {
+    return;
+  }
+  const AdblockCosmeticDecision cosmetics =
+      AdblockService::Get().CosmeticsForUrl(url);
+  InjectAdblockCosmeticCss(frame, cosmetics.hide_css);
+  if (url.find("youtube.com") != std::string::npos ||
+      url.find("youtube-nocookie.com") != std::string::npos ||
+      url.find("youtubekids.com") != std::string::npos ||
+      url.find("youtu.be") != std::string::npos) {
+    InjectYoutubePlayerAdStrip(frame);
+  }
+}
+
+void InjectAdblockObservers(CefRefPtr<CefFrame> frame) {
+  if (!frame || !frame->IsValid()) {
+    return;
+  }
+  const std::string url = frame->GetURL().ToString();
+  if (!IsHttpContentUrl(url)) {
+    return;
+  }
+  const AdblockCosmeticDecision cosmetics =
+      AdblockService::Get().CosmeticsForUrl(url);
+  InjectAdblockGenericObserver(frame, cosmetics.exceptions_json,
+                               cosmetics.generichide);
+  InjectAdblockSlotCollapse(frame);
 }
 
 }  // namespace omni

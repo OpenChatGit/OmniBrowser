@@ -1,0 +1,118 @@
+.topbar-adblock {
+  color: #f2f2f2;
+  transition: color 0.15s ease, opacity 0.15s ease, background 0.15s ease;
+}
+
+.topbar-adblock.is-off {
+  color: rgba(255, 255, 255, 0.28);
+}
+
+.topbar-adblock.is-off:hover:not(:disabled) {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.topbar-adblock.is-on:hover:not(:disabled) {
+  color: #ffffff;
+}
+
+.topbar-adblock.is-open {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Fallback only when native overlay host is unavailable. */
+.omni-shield-panel {
+  position: fixed;
+  z-index: 1000;
+  width: min(320px, calc(100vw - 16px));
+  padding: 0.85rem 0.9rem;
+  border-radius: 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: #2b2a2b;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 0.8rem;
+}
+
+.omni-shield-panel[hidden] {
+  display: none !important;
+}
+
+.browser-start-stats {
+  position: absolute;
+  left: 50%;
+  bottom: 1.35rem;
+  transform: translateX(-50%);
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  width: min(280px, calc(100% - 2rem));
+}
+
+.browser-start-stats-toggle {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.82rem;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  padding: 0.35rem 0.5rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(255, 255, 255, 0.18);
+}
+
+.browser-start-stats-toggle:hover {
+  color: var(--text);
+  text-decoration-color: rgba(255, 255, 255, 0.4);
+}
+
+.browser-start-stats-card {
+  width: 100%;
+  padding: 1rem 1.1rem 1.05rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(26, 25, 26, 0.92);
+  box-shadow: var(--shadow);
+  text-align: center;
+  animation: omni-stats-in 0.22s ease;
+}
+
+.browser-start-stats-card[hidden] {
+  display: none !important;
+}
+
+.browser-start-stats-card-label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.browser-start-stats-card-value {
+  font-family: var(--font-brand);
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: #fff;
+  line-height: 1.1;
+}
+
+.browser-start-stats-card-sub {
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+@keyframes omni-stats-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -20,6 +20,36 @@ if(MSVC)
   )
 endif()
 
+# Brave adblock-rust via C FFI (requires Rust/cargo on PATH).
+find_program(OMNI_CARGO cargo REQUIRED)
+set(OMNI_ADBLOCK_FFI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/adblock_ffi")
+set(OMNI_ADBLOCK_FFI_TARGET_DIR "${CMAKE_CURRENT_BINARY_DIR}/adblock_ffi_target")
+# Always release for the adblock staticlib (perf + smaller deps). Multi-config
+# generators (Visual Studio) leave CMAKE_BUILD_TYPE empty.
+set(OMNI_ADBLOCK_PROFILE "release")
+set(OMNI_ADBLOCK_LIB
+  "${OMNI_ADBLOCK_FFI_TARGET_DIR}/${OMNI_ADBLOCK_PROFILE}/omni_adblock_ffi.lib")
+add_custom_command(
+  OUTPUT "${OMNI_ADBLOCK_LIB}"
+  COMMAND ${CMAKE_COMMAND} -E env
+          "CARGO_TARGET_DIR=${OMNI_ADBLOCK_FFI_TARGET_DIR}"
+          ${OMNI_CARGO} build --release
+          --manifest-path "${OMNI_ADBLOCK_FFI_DIR}/Cargo.toml"
+  WORKING_DIRECTORY "${OMNI_ADBLOCK_FFI_DIR}"
+  DEPENDS
+    "${OMNI_ADBLOCK_FFI_DIR}/src/lib.rs"
+    "${OMNI_ADBLOCK_FFI_DIR}/Cargo.toml"
+    "${OMNI_ADBLOCK_FFI_DIR}/include/omni_adblock.h"
+  COMMENT "Building omni_adblock_ffi (adblock-rust)"
+  VERBATIM
+)
+add_custom_target(omni_adblock_ffi_build DEPENDS "${OMNI_ADBLOCK_LIB}")
+add_library(omni_adblock_ffi STATIC IMPORTED GLOBAL)
+set_target_properties(omni_adblock_ffi PROPERTIES
+  IMPORTED_LOCATION "${OMNI_ADBLOCK_LIB}"
+)
+add_dependencies(omni_adblock_ffi omni_adblock_ffi_build)
+
 set(OMNI_SRCS
   src/main_win.cpp
   src/app/omni_app.cpp
@@ -27,6 +57,16 @@ set(OMNI_SRCS
   src/app/app_menu.cpp
   src/app/scrollbar_inject.cpp
   src/app/window_delegate.cpp
+  src/adblock/adblock_service.cpp
+  src/adblock/adblock_resource_handler.cpp
+  src/api/api_dispatcher.cpp
+  src/api/register_apis.cpp
+  src/api/handlers/adblock_api.cpp
+  src/api/handlers/browser_api.cpp
+  src/api/handlers/window_api.cpp
+  src/api/handlers/library_api.cpp
+  src/api/handlers/terminal_api.cpp
+  src/api/handlers/git_api.cpp
   src/ipc/library_ipc.cpp
   src/ipc/library_commands.cpp
   src/ipc/library_json.cpp
@@ -53,10 +93,11 @@ SET_CEF_TARGET_OUT_DIR()
 
 add_executable(${OMNI_TARGET} WIN32 ${OMNI_SRCS})
 SET_EXECUTABLE_TARGET_PROPERTIES(${OMNI_TARGET})
-add_dependencies(${OMNI_TARGET} libcef_dll_wrapper)
+add_dependencies(${OMNI_TARGET} libcef_dll_wrapper omni_adblock_ffi)
 
 target_include_directories(${OMNI_TARGET} PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  "${CMAKE_CURRENT_SOURCE_DIR}/adblock_ffi/include"
   "${CMAKE_CURRENT_BINARY_DIR}/generated"
   "${CEF_INCLUDE_PATH}"
 )
@@ -71,8 +112,14 @@ target_link_libraries(${OMNI_TARGET}
   libcef_lib
   libcef_dll_wrapper
   omni_sqlite
+  omni_adblock_ffi
   ${CEF_STANDARD_LIBS}
   comdlg32
+  winhttp
+  ws2_32
+  userenv
+  ntdll
+  bcrypt
 )
 
 ADD_WINDOWS_MANIFEST("${CMAKE_CURRENT_SOURCE_DIR}/win" "${OMNI_TARGET}" "exe")
@@ -86,6 +133,14 @@ add_custom_command(TARGET ${OMNI_TARGET} POST_BUILD
           "${CMAKE_SOURCE_DIR}/ui"
           "${CEF_TARGET_OUT_DIR}/ui"
   COMMENT "Copying bundled UI assets"
+)
+
+# Bundled adblock lists + redirect resources (next to EXE).
+add_custom_command(TARGET ${OMNI_TARGET} POST_BUILD
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          "${CMAKE_SOURCE_DIR}/resources/adblock"
+          "${CEF_TARGET_OUT_DIR}/adblock"
+  COMMENT "Copying bundled adblock resources"
 )
 
 set_target_properties(${OMNI_TARGET} PROPERTIES

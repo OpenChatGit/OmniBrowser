@@ -2,7 +2,9 @@
 
 #include "include/base/cef_logging.h"
 #include "include/wrapper/cef_helpers.h"
+#include "omni/adblock_service.h"
 #include "omni/omni_handler.h"
+#include "omni/paths.h"
 
 namespace omni {
 namespace {
@@ -19,6 +21,8 @@ enum CommandId : int {
   kOpenDownloads = 1007,
   kOpenBookmarks = 1008,
   kOpenInfo = 1009,
+  kToggleAdblock = 1010,
+  kToggleAdblockAggressive = 1011,
 };
 
 }  // namespace
@@ -52,6 +56,9 @@ CefRefPtr<CefMenuModel> AppMenuDelegate::Build() {
   menu->AddItem(kOpenHistory, "History");
   bind(kOpenHistory, Json{{"action", "open-history"}});
   menu->SetAccelerator(kOpenHistory, 'H', false, true, false);
+  if (paths::IsPrivateMode()) {
+    menu->SetEnabled(kOpenHistory, false);
+  }
 
   menu->AddItem(kOpenBookmarks, "Bookmarks");
   bind(kOpenBookmarks, Json{{"action", "open-bookmarks"}});
@@ -62,6 +69,22 @@ CefRefPtr<CefMenuModel> AppMenuDelegate::Build() {
 
   menu->AddItem(kClearData, "Delete Browsing Data");
   bind(kClearData, Json{{"action", "clear-data"}});
+  if (paths::IsPrivateMode()) {
+    menu->SetEnabled(kClearData, false);
+  }
+
+  menu->AddSeparator();
+
+  const bool adblock_on = AdblockService::Get().enabled();
+  menu->AddCheckItem(kToggleAdblock, "Block ads && trackers");
+  menu->SetChecked(kToggleAdblock, adblock_on);
+  bind(kToggleAdblock, Json{{"action", "toggle-adblock"}});
+
+  menu->AddCheckItem(kToggleAdblockAggressive, "Aggressive ad blocking");
+  menu->SetChecked(kToggleAdblockAggressive,
+                   AdblockService::Get().aggressive());
+  menu->SetEnabled(kToggleAdblockAggressive, adblock_on);
+  bind(kToggleAdblockAggressive, Json{{"action", "toggle-adblock-aggressive"}});
 
   menu->AddSeparator();
 
@@ -80,6 +103,28 @@ void AppMenuDelegate::ExecuteCommand(CefRefPtr<CefMenuModel> menu_model,
   CEF_REQUIRE_UI_THREAD();
   (void)menu_model;
   (void)event_flags;
+  if (command_id == kToggleAdblock) {
+    auto& adblock = AdblockService::Get();
+    adblock.set_enabled(!adblock.enabled());
+    Emit(Json{{"action", "adblock-changed"},
+              {"enabled", adblock.enabled()},
+              {"aggressive", adblock.aggressive()}});
+    return;
+  }
+  if (command_id == kToggleAdblockAggressive) {
+    auto& adblock = AdblockService::Get();
+    adblock.set_aggressive(!adblock.aggressive());
+    // Aggressive mode swaps which lists are loaded.
+    adblock.ReloadEngine();
+    Emit(Json{{"action", "adblock-changed"},
+              {"enabled", adblock.enabled()},
+              {"aggressive", adblock.aggressive()}});
+    return;
+  }
+  if (paths::IsPrivateMode() &&
+      (command_id == kOpenHistory || command_id == kClearData)) {
+    return;
+  }
   auto it = commands_.find(command_id);
   if (it == commands_.end()) {
     return;

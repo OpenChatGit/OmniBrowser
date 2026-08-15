@@ -1,0 +1,202 @@
+{
+  "version": 3,
+  "lists": [
+    {
+      "id": "easylist",
+      "title": "EasyList",
+      "url": "https://easylist.to/easylist/easylist.txt",
+      "filename": "easylist.txt",
+      "enabled": true
+    },
+    {
+      "id": "easyprivacy",
+      "title": "EasyPrivacy",
+      "url": "https://easylist.to/easylist/easyprivacy.txt",
+      "filename": "easyprivacy.txt",
+      "enabled": true
+    },
+    {
+      "id": "ublock-filters",
+      "title": "uBlock filters",
+      "url": "https://ublockorigin.github.io/uAssets/filters/filters.txt",
+      "filename": "ublock-filters.txt",
+      "enabled": true
+    },
+    {
+      "id": "ublock-filters-2020",
+      "title": "uBlock filters 2020",
+      "url": "https://ublockorigin.github.io/uAssets/filters/filters-2020.txt",
+      "filename": "ublock-filters-2020.txt",
+      "enabled": true
+    },
+    {
+      "id": "ublock-filters-2021",
+      "title": "uBlock filters 2021",
+      "url": "https://ublockorigin.github.io/uAssets/filters/filters-2021.txt",
+      "filename": "ublock-filters-2021.txt",
+      "enabled": true
+    },
+    {
+      "id": "ublock-filters-2022",
+      "title": "uBlock filters 2022",
+      "url": "https://ublockorigin.github.io/uAssets/filters/filters-2022.txt",
+      "filename": "ublock-filters-2022.txt",
+      "enabled": true
+    },
+    {
+      "id": "ublock-filters-2023",
+      "title": "uBlock filters 2023",
+      "url": "https://ublockorigin.github.io/uAssets/filters/filters-2023.txt",
+      "filename": "ublock-filters-2023.txt",
+      "enabled": true
+    },
+    {
+      "id": "ublock-filters-2024",
+      "title": "uBlock filters 2024",
+      "url": "https://ublockorigin.github.io/uAssets/filters/filters-2024.txt",
+      "filename": "ublock-filters-2024.txt",
+      "enabled": true
+    },
+    {
+      "id": "ublock-filters-2025",
+      "title": "uBlock filters 2025",
+      "url": "https://ublockorigin.github.io/uAssets/filters/filters-2025.txt",
+      "filename": "ublock-filters-2025.txt",
+      "enabled": true
+    },
+    {
+      "id": "ublock-filters-2026",
+      "title": "uBlock filters 2026",
+      "url": "https://ublockorigin.github.io/uAssets/filters/filters-2026.txt",
+      "filename": "ublock-filters-2026.txt",
+      "enabled": true
+    },
+    {
+      "id": "ublock-filters-general",
+      "title": "uBlock filters - General",
+      "url": "https://ublockorigin.github.io/uAssets/filters/filters-general.txt",
+      "filename": "ublock-filters-general.txt",
+      "enabled": true
+    },
+    {
+      "id": "ublock-badware",
+      "title": "uBlock filters - Badware",
+      "url": "https://ublockorigin.github.io/uAssets/filters/badware.txt",
+      "filename": "ublock-badware.txt",
+      "enabled": true
+    },
+    {
+      "id": "ublock-privacy",
+      "title": "uBlock filters - Privacy",
+      "url": "https://ublockorigin.github.io/uAssets/filters/privacy.txt",
+      "filename": "ublock-privacy.txt",
+      "enabled": true
+    },
+    {
+      "id": "ublock-resource-abuse",
+      "title": "uBlock filters - Resource abuse",
+      "url": "https://ublockorigin.github.io/uAssets/filters/resource-abuse.txt",
+      "filename": "ublock-resource-abuse.txt",
+      "enabled": true
+    },
+    {
+      "id": "ublock-quick-fixes",
+      "title": "uBlock filters - Quick fixes",
+      "url": "https://ublockorigin.github.io/uAssets/filters/quick-fixes.txt",
+      "filename": "ublock-quick-fixes.txt",
+      "enabled": true
+    },
+    {
+      "id": "ublock-unbreak",
+      "title": "uBlock filters - Unbreak",
+      "url": "https://ublockorigin.github.io/uAssets/filters/unbreak.txt",
+      "filename": "ublock-unbreak.txt",
+      "enabled": true
+    },
+    {
+      "id": "ublock-link-shorteners",
+      "title": "uBlock filters - Link shorteners",
+      "url": "https://ublockorigin.github.io/uAssets/filters/ubo-link-shorteners.txt",
+      "filename": "ublock-link-shorteners.txt",
+      "enabled": true
+    },
+    {
+      "id": "urlhaus",
+      "title": "URLhaus Malicious URL Blocklist",
+      "url": "https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-agh-online.txt",
+      "filename": "urlhaus.txt",
+      "enabled": true
+    },
+    {
+      "id": "brave-unbreak",
+      "title": "Brave Unbreak",
+      "url": "https://raw.githubusercontent.com/brave/adblock-lists/master/brave-unbreak.txt",
+      "filename": "brave-unbreak.txt",
+      "enabled": true
+    },
+    {
+      "id": "brave-specific",
+      "title": "Brave Specific",
+      "url": "https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-specific.txt",
+      "filename": "brave-specific.txt",
+      "enabled": true
+    },
+    {
+      "id": "brave-social",
+      "title": "Brave Social",
+      "url": "https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-social.txt",
+      "filename": "brave-social.txt",
+      "enabled": true
+    },
+    {
+      "id": "brave-sugarcoat",
+      "title": "Brave SugarCoat",
+      "url": "https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-sugarcoat.txt",
+      "filename": "brave-sugarcoat.txt",
+      "enabled": true
+    },
+    {
+      "id": "brave-firstparty",
+      "title": "Brave First-Party",
+      "url": "https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-firstparty.txt",
+      "filename": "brave-firstparty.txt",
+      "enabled": true
+    },
+    {
+      "id": "brave-firstparty-regional",
+      "title": "Brave First-Party Regional",
+      "url": "https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-firstparty-regional.txt",
+      "filename": "brave-firstparty-regional.txt",
+      "enabled": true
+    },
+    {
+      "id": "easylist-cookie",
+      "title": "EasyList Cookie",
+      "url": "https://secure.fanboy.co.nz/fanboy-cookiemonster_ubo.txt",
+      "filename": "easylist-cookie.txt",
+      "enabled": true
+    },
+    {
+      "id": "ublock-cookies",
+      "title": "uBlock filters - Cookie Notices",
+      "url": "https://ublockorigin.github.io/uAssets/filters/annoyances-cookies.txt",
+      "filename": "ublock-cookies.txt",
+      "enabled": true
+    },
+    {
+      "id": "brave-cookie-specific",
+      "title": "Brave Cookie Specific",
+      "url": "https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-cookie-specific.txt",
+      "filename": "brave-cookie-specific.txt",
+      "enabled": true
+    },
+    {
+      "id": "fanboy-annoyance",
+      "title": "Fanboy Annoyance (aggressive)",
+      "url": "https://easylist.to/easylist/fanboy-annoyance.txt",
+      "filename": "fanboy-annoyance.txt",
+      "enabled": false,
+      "aggressive": true
+    }
+  ]
+}

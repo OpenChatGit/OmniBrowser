@@ -149,6 +149,24 @@ OmniBrowserViewDelegate::OmniBrowserViewDelegate(
     BrowserPane pane)
     : runtime_style_(runtime_style), pane_(pane) {}
 
+void OmniBrowserViewDelegate::OnBrowserCreated(
+    CefRefPtr<CefBrowserView> browser_view,
+    CefRefPtr<CefBrowser> browser) {
+  (void)browser_view;
+  if (auto* handler = OmniHandler::GetInstance()) {
+    handler->RegisterBrowserPane(browser, pane_);
+  }
+}
+
+void OmniBrowserViewDelegate::OnBrowserDestroyed(
+    CefRefPtr<CefBrowserView> browser_view,
+    CefRefPtr<CefBrowser> browser) {
+  (void)browser_view;
+  if (auto* handler = OmniHandler::GetInstance()) {
+    handler->UnregisterBrowserPane(browser);
+  }
+}
+
 bool OmniBrowserViewDelegate::OnPopupBrowserViewCreated(
     CefRefPtr<CefBrowserView> browser_view,
     CefRefPtr<CefBrowserView> popup_browser_view,

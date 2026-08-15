@@ -36,7 +36,8 @@ html:has(body.is-history) {
   background: transparent;
 }
 
-body.is-media {
+body.is-media,
+body.is-shields {
   background: #2b2a2b;
 }
 
@@ -378,4 +379,213 @@ body.is-media {
   border-radius: 0;
   background: rgba(255, 255, 255, 0.88);
   border: 0;
+}
+
+/* Shields / adblock — same overlay host as media & history. */
+#overlay-root .omni-shield {
+  width: 320px;
+  max-width: 320px;
+  box-sizing: border-box;
+  background: #2b2a2b;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 0;
+  box-shadow: none;
+  color: #f0f0f0;
+  font-family: inherit;
+  pointer-events: auto;
+}
+
+#overlay-root .omni-shield-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 14px 12px;
+}
+
+#overlay-root .omni-shield-site {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#overlay-root .omni-shield-domain-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 22px;
+}
+
+#overlay-root .omni-shield-favicon {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  display: block;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+#overlay-root .omni-shield-domain {
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #f2f2f2;
+}
+
+#overlay-root .omni-shield-status {
+  font-size: 0.74rem;
+  line-height: 1.25;
+  color: rgba(255, 255, 255, 0.55);
+  /* Align under domain text: favicon 18px + gap 8px */
+  padding-left: 26px;
+}
+
+#overlay-root .omni-shield-status strong {
+  color: #f0f0f0;
+  font-weight: 650;
+}
+
+#overlay-root .omni-shield-toggle {
+  position: relative;
+  flex: 0 0 auto;
+  align-self: flex-start;
+  width: 40px;
+  height: 22px;
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  cursor: pointer;
+  padding: 0;
+}
+
+#overlay-root .omni-shield-toggle.is-on {
+  background: #1a9fff;
+}
+
+#overlay-root .omni-shield-toggle::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #121112;
+  transition: transform 0.12s ease;
+}
+
+#overlay-root .omni-shield-toggle.is-on::after {
+  transform: translateX(18px);
+  background: #0b1c28;
+}
+
+#overlay-root .omni-shield-stat {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 14px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+#overlay-root .omni-shield-stat-count {
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: -0.02em;
+}
+
+#overlay-root .omni-shield-divider {
+  height: 1px;
+  margin: 12px 14px 0;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+#overlay-root .omni-shield-advanced-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  color: #f0f0f0;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+#overlay-root .omni-shield-advanced-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+#overlay-root .omni-shield-icon,
+#overlay-root .omni-shield-chevron {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+#overlay-root .omni-shield-chevron {
+  margin-left: auto;
+  transition: transform 0.12s ease;
+}
+
+#overlay-root .omni-shield-advanced-btn[aria-expanded="true"] .omni-shield-chevron {
+  transform: rotate(180deg);
+}
+
+#overlay-root .omni-shield-advanced {
+  padding: 0 14px 8px;
+}
+
+#overlay-root .omni-shield-advanced[hidden] {
+  display: none !important;
+}
+
+#overlay-root .omni-shield-advanced-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+#overlay-root .omni-shield-advanced-row span {
+  color: #f0f0f0;
+}
+
+#overlay-root .omni-shield-foot {
+  margin-top: 2px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.18);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+#overlay-root .omni-shield-learn {
+  color: #66c0f4;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }

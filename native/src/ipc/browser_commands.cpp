@@ -211,6 +211,8 @@ bool HandleBrowserCommand(
     return true;
   }
 
+  // browser.adblock.* is registered on ApiDispatcher (adblock_api.cpp).
+
   if (method == "menu.show") {
     const Json payload = params.contains("payload") ? params["payload"]
                                                     : Json::object();
@@ -270,11 +272,17 @@ bool HandleBrowserCommand(
   }
 
   if (method == "history.list") {
-    callback->Success(Json{{"ok", true}, {"entries", history::List()}}.dump());
+    const Json entries =
+        paths::IsPrivateMode() ? Json::array() : history::List();
+    callback->Success(Json{{"ok", true}, {"entries", entries}}.dump());
     return true;
   }
 
   if (method == "history.record") {
+    if (paths::IsPrivateMode()) {
+      callback->Success(Json{{"ok", true}, {"entries", Json::array()}}.dump());
+      return true;
+    }
     const std::string url = params.value("url", "");
     if (url.empty()) {
       callback->Failure(400, "url required");
@@ -288,6 +296,13 @@ bool HandleBrowserCommand(
   }
 
   if (method == "history.remove") {
+    if (paths::IsPrivateMode()) {
+      callback->Success(Json{{"ok", true},
+                             {"removed", false},
+                             {"entries", Json::array()}}
+                            .dump());
+      return true;
+    }
     const std::string url = params.value("url", "");
     if (url.empty()) {
       callback->Failure(400, "url required");
@@ -302,12 +317,20 @@ bool HandleBrowserCommand(
   }
 
   if (method == "history.clear") {
+    if (paths::IsPrivateMode()) {
+      callback->Success(Json{{"ok", true}, {"entries", Json::array()}}.dump());
+      return true;
+    }
     history::Clear();
     callback->Success(Json{{"ok", true}, {"entries", Json::array()}}.dump());
     return true;
   }
 
   if (method == "history.import") {
+    if (paths::IsPrivateMode()) {
+      callback->Success(Json{{"ok", true}, {"entries", Json::array()}}.dump());
+      return true;
+    }
     const Json entries = params.contains("entries") && params["entries"].is_array()
                              ? params["entries"]
                              : Json::array();
@@ -331,6 +354,8 @@ bool HandleBrowserCommand(
     const Json entries =
         bookmarks::Record(url, params.value("title", ""),
                           params.value("ts", static_cast<int64_t>(0)));
+    owner->EmitBrowserEvent(
+        Json{{"type", "bookmarks"}, {"action", "record"}, {"url", url}});
     callback->Success(Json{{"ok", true}, {"entries", entries}}.dump());
     return true;
   }
@@ -342,6 +367,8 @@ bool HandleBrowserCommand(
       return true;
     }
     const bool removed = bookmarks::Remove(url);
+    owner->EmitBrowserEvent(
+        Json{{"type", "bookmarks"}, {"action", "remove"}, {"url", url}});
     callback->Success(Json{{"ok", true},
                            {"removed", removed},
                            {"entries", bookmarks::List()}}
@@ -351,6 +378,8 @@ bool HandleBrowserCommand(
 
   if (method == "bookmarks.clear") {
     bookmarks::Clear();
+    owner->EmitBrowserEvent(
+        Json{{"type", "bookmarks"}, {"action", "clear"}});
     callback->Success(Json{{"ok", true}, {"entries", Json::array()}}.dump());
     return true;
   }
@@ -359,8 +388,10 @@ bool HandleBrowserCommand(
     const Json entries = params.contains("entries") && params["entries"].is_array()
                              ? params["entries"]
                              : Json::array();
-    callback->Success(
-        Json{{"ok", true}, {"entries", bookmarks::Import(entries)}}.dump());
+    const Json result = bookmarks::Import(entries);
+    owner->EmitBrowserEvent(
+        Json{{"type", "bookmarks"}, {"action", "import"}});
+    callback->Success(Json{{"ok", true}, {"entries", result}}.dump());
     return true;
   }
 

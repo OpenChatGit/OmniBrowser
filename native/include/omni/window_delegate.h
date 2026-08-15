@@ -43,6 +43,10 @@ class OmniBrowserViewDelegate : public CefBrowserViewDelegate {
  public:
   OmniBrowserViewDelegate(cef_runtime_style_t runtime_style, BrowserPane pane);
 
+  void OnBrowserCreated(CefRefPtr<CefBrowserView> browser_view,
+                        CefRefPtr<CefBrowser> browser) override;
+  void OnBrowserDestroyed(CefRefPtr<CefBrowserView> browser_view,
+                          CefRefPtr<CefBrowser> browser) override;
   bool OnPopupBrowserViewCreated(CefRefPtr<CefBrowserView> browser_view,
                                  CefRefPtr<CefBrowserView> popup_browser_view,
                                  bool is_devtools) override;

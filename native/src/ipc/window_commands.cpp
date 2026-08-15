@@ -83,7 +83,7 @@ bool ClaimFileUtf8(const std::string& path_utf8, std::wstring* claimed_out) {
   return true;
 }
 
-bool LaunchNewAppInstance(std::string* error) {
+bool LaunchNewAppInstance(bool private_window, std::string* error) {
   wchar_t module[MAX_PATH];
   const DWORD len = GetModuleFileNameW(nullptr, module, MAX_PATH);
   if (len == 0 || len >= MAX_PATH) {
@@ -93,11 +93,15 @@ bool LaunchNewAppInstance(std::string* error) {
     return false;
   }
 
-  const std::wstring instance = MakeInstanceId();
+  const std::wstring instance =
+      (private_window ? L"p" : L"") + MakeInstanceId();
   std::wstring cmd = L"\"";
   cmd += module;
   cmd += L"\" --omni-instance=";
   cmd += instance;
+  if (private_window) {
+    cmd += L" --omni-private";
+  }
 
   // CreateProcess needs a writable command-line buffer.
   std::vector<wchar_t> cmd_buf(cmd.begin(), cmd.end());
@@ -133,14 +137,20 @@ bool HandleWindowCommand(
     const Json& params,
     CefRefPtr<CefMessageRouterBrowserSide::Callback> callback) {
   if (method == "app.info") {
+    const bool private_mode = paths::IsPrivateMode();
     callback->Success(Json{{"devMode", IsDevMode()},
-                           {"name", "Omni Browser"},
-                           {"version", "0.1.0"}}
+                           {"name", private_mode ? "Omni Private" : "Omni Browser"},
+                           {"version", "0.1.0"},
+                           {"private", private_mode}}
                           .dump());
     return true;
   }
 
   if (method == "tab.consumePending") {
+    if (paths::IsPrivateMode()) {
+      callback->Success(Json{{"ok", true}, {"tab", nullptr}}.dump());
+      return true;
+    }
     std::wstring claimed;
     if (!ClaimFileUtf8(paths::PendingOpenTabPath(), &claimed)) {
       callback->Success(Json{{"ok", true}, {"tab", nullptr}}.dump());
@@ -177,11 +187,22 @@ bool HandleWindowCommand(
 
   if (method == "window.new") {
     std::string error;
-    if (!LaunchNewAppInstance(&error)) {
+    if (!LaunchNewAppInstance(false, &error)) {
       callback->Failure(500, error.empty() ? "Failed to open new window" : error);
       return true;
     }
     callback->Success(Json{{"ok", true}}.dump());
+    return true;
+  }
+
+  if (method == "window.newPrivate") {
+    std::string error;
+    if (!LaunchNewAppInstance(true, &error)) {
+      callback->Failure(500, error.empty() ? "Failed to open private window"
+                                           : error);
+      return true;
+    }
+    callback->Success(Json{{"ok", true}, {"private", true}}.dump());
     return true;
   }
 
@@ -196,7 +217,7 @@ bool HandleWindowCommand(
       return true;
     }
     std::string error;
-    if (!LaunchNewAppInstance(&error)) {
+    if (!LaunchNewAppInstance(false, &error)) {
       DeleteFileUtf8(paths::PendingOpenTabPath());
       callback->Failure(500, error.empty() ? "Failed to open new window" : error);
       return true;

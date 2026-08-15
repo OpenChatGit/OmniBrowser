@@ -30,3 +30,7 @@ workers/**/.wrangler/
 workers/**/.wrangler-out/
 workers/**/dist/
 workers/**/.dev.vars
+
+# Rust (adblock-rust FFI)
+native/adblock_ffi/target/
+**/adblock_ffi_target/

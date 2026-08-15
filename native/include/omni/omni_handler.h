@@ -2,7 +2,9 @@
 
 #include <list>
 #include <map>
+#include <mutex>
 #include <string>
+#include <unordered_set>
 #include <vector>
 
 #include "include/cef_client.h"
@@ -10,6 +12,7 @@
 #include "include/cef_drag_handler.h"
 #include "include/cef_focus_handler.h"
 #include "include/cef_keyboard_handler.h"
+#include "include/cef_resource_request_handler.h"
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_menu_button.h"
 #include "include/views/cef_overlay_controller.h"
@@ -22,6 +25,7 @@
 #include "omni/library_repository.h"
 #include "omni/terminal_manager.h"
 #include "omni/ui_hot_reload.h"
+#include "omni/window_delegate.h"
 
 namespace omni {
 
@@ -60,6 +64,11 @@ class OmniHandler : public CefClient,
   bool IsContentBrowser(CefRefPtr<CefBrowser> browser) const;
   bool IsShellBrowser(CefRefPtr<CefBrowser> browser) const;
   bool IsOverlayBrowser(CefRefPtr<CefBrowser> browser) const;
+  /** IO-thread safe: content browsers tracked by CefBrowser identifier. */
+  bool ShouldFilterNetwork(CefRefPtr<CefBrowser> browser) const;
+  /** Pane registration from OmniBrowserViewDelegate::OnBrowserCreated. */
+  void RegisterBrowserPane(CefRefPtr<CefBrowser> browser, BrowserPane pane);
+  void UnregisterBrowserPane(CefRefPtr<CefBrowser> browser);
 
   // Per-tab content browsers: keep inactive pages (and media) alive.
   bool EnsureContentTab(const std::string& tab_id);
@@ -191,6 +200,10 @@ class OmniHandler : public CefClient,
                             bool canGoBack,
                             bool canGoForward) override;
 
+  void OnLoadStart(CefRefPtr<CefBrowser> browser,
+                   CefRefPtr<CefFrame> frame,
+                   TransitionType transition_type) override;
+
   void OnLoadEnd(CefRefPtr<CefBrowser> browser,
                  CefRefPtr<CefFrame> frame,
                  int httpStatusCode) override;
@@ -206,6 +219,15 @@ class OmniHandler : public CefClient,
                       CefRefPtr<CefRequest> request,
                       bool user_gesture,
                       bool is_redirect) override;
+
+  CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
+      CefRefPtr<CefBrowser> browser,
+      CefRefPtr<CefFrame> frame,
+      CefRefPtr<CefRequest> request,
+      bool is_navigation,
+      bool is_download,
+      const CefString& request_initiator,
+      bool& disable_default_handling) override;
 
   bool OnOpenURLFromTab(CefRefPtr<CefBrowser> browser,
                         CefRefPtr<CefFrame> frame,
@@ -223,14 +245,15 @@ class OmniHandler : public CefClient,
       CefRefPtr<CefFrame> frame,
       const std::vector<CefDraggableRegion>& regions) override;
 
+  void EmitBrowserEvent(const Json& event);
+  void EmitOverlayEvent(const Json& event);
+
  private:
   void PlatformTitleChange(CefRefPtr<CefBrowser> browser,
                            const CefString& title);
   void StartHotReloadIfNeeded();
   void ApplyDraggableRegions(CefRefPtr<CefBrowser> browser,
                              const std::vector<CefDraggableRegion>& regions);
-  void EmitBrowserEvent(const Json& event);
-  void EmitOverlayEvent(const Json& event);
   void ApplyOverlayBounds(int height);
   void EnsureAppMenuButton();
   void ForceCloseAuxiliaryBrowsers();
@@ -242,6 +265,9 @@ class OmniHandler : public CefClient,
   bool OpenInContentBrowser(const std::string& url);
   int ContentMemoryMb() const;
   void EmitContentEvent(CefRefPtr<CefBrowser> browser, Json event);
+  void FlushPendingContentUrl(const std::string& tab_id);
+  void TrackBrowserIdentity(CefRefPtr<CefBrowser> browser);
+  void UntrackBrowserIdentity(CefRefPtr<CefBrowser> browser);
 
   const bool alloy_style_;
   typedef std::list<CefRefPtr<CefBrowser>> BrowserList;
@@ -291,6 +317,13 @@ class OmniHandler : public CefClient,
 
   CefRefPtr<CefMessageRouterBrowserSide> message_router_;
   CefMessageRouterBrowserSide::Handler* library_handler_ = nullptr;
+
+  // CefBrowserView APIs are UI-thread only; network hooks run on the IO thread
+  // and must use these identifiers instead of GetForBrowser().
+  mutable std::mutex browser_ids_mu_;
+  int shell_browser_id_ = -1;
+  int overlay_browser_id_ = -1;
+  std::unordered_set<int> content_browser_ids_;
 
   IMPLEMENT_REFCOUNTING(OmniHandler);
 };

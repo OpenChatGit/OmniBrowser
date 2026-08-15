@@ -1,0 +1,65 @@
+[Adblock Plus 2.0]
+! Title: Omni Browser baseline
+! Description: Compact offline defaults until EasyList/EasyPrivacy are downloaded.
+! Version: 2026.08.15
+!
+! YouTube in-player ads (EasyList / uBO / Brave). The ad creative itself is
+! first-party googlevideo; these endpoints plus player-JSON stripping stop it.
+||youtube.com/pagead/
+||youtube.com/youtubei/v1/player/ad_break
+||youtube.com/api/stats/ads
+||youtube.com/get_midroll_
+||youtube.com/pcs/activeview
+||youtube.com/ptracking?
+||youtubekids.com/api/stats/ads
+||youtube-nocookie.com/api/stats/ads
+||googlevideo.com/initplayback?source=youtube&*oad=
+||doubleclick.net^
+||googlesyndication.com^
+||googleadservices.com^
+||adservice.google.com^
+||pagead2.googlesyndication.com^
+||fundingchoicesmessages.google.com^
+||adnxs.com^
+||adsrvr.org^
+||amazon-adsystem.com^
+||scorecardresearch.com^
+||quantserve.com^
+||taboola.com^
+||outbrain.com^
+||moatads.com^
+||advertising.com^
+||adsafeprotected.com^
+||facebook.com/tr^
+||connect.facebook.net/en_US/fbevents.js^
+||hotjar.com^
+||clarity.ms^
+||criteo.com^
+||rubiconproject.com^
+||pubmatic.com^
+||openx.net^
+||casalemedia.com^
+||2mdn.net^
+||media.net^
+||yieldmo.com^
+||smartadserver.com^
+##.adsbygoogle
+##ins.adsbygoogle
+##.ad-banner
+##.ad-container
+##[id^="google_ads_"]
+##[id^="google_ads_iframe"]
+##[id^="div-gpt-ad"]
+##[class*="advertisement"]
+##iframe[src*="googlesyndication.com"]
+##iframe[src*="doubleclick.net"]
+##iframe[src*="googleads.g.doubleclick.net"]
+##iframe[src*="adservice.google."]
+youtube.com##ytd-ad-slot-renderer
+youtube.com##ytd-promoted-sparkles-web-renderer
+youtube.com##ytd-in-feed-ad-layout-renderer
+youtube.com##ytd-display-ad-renderer
+youtube.com###masthead-ad
+youtube.com##ytd-rich-item-renderer:has(> ytd-ad-slot-renderer)
+youtube.com##ytd-rich-item-renderer:has(> #content > ytd-ad-slot-renderer)
+youtube.com###contents > ytd-rich-item-renderer:has(> ytd-ad-slot-renderer)

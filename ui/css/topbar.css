@@ -1,4 +1,4 @@
-﻿.topbar {
+.topbar {
   --topbar-side: 6rem;
   flex: 0 0 44px;
   height: 44px;
@@ -186,7 +186,12 @@
   fill: currentColor;
 }
 
+.topbar-center:focus-within {
+  z-index: 100;
+}
+
 .topbar-search {
+  position: relative;
   flex: 1 1 auto;
   width: auto;
   min-width: 0;
@@ -194,7 +199,7 @@
   align-items: center;
   gap: 0.45rem;
   min-height: 32px;
-  padding: 0 0.35rem 0 0.75rem;
+  padding: 0 0.3rem 0 0.75rem;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -218,10 +223,15 @@
   line-height: 0;
 }
 
-.topbar-search-icon .icon {
+.topbar-search-icon .icon,
+.topbar-search-mark {
   display: block;
   width: 15px;
   height: 15px;
+  object-fit: contain;
+}
+
+.topbar-search-icon .icon {
   stroke-width: 1.75px;
 }
 
@@ -246,29 +256,26 @@
   opacity: 1;
 }
 
-.topbar-search-go {
-  appearance: none;
-  border: 0;
-  width: 26px;
-  height: 26px;
-  display: grid;
-  place-items: center;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
+.topbar-search-divider {
+  flex: 0 0 auto;
+  width: 1px;
+  height: 16px;
+  margin: 0 0.05rem;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.topbar-search .topbar-adblock {
+  width: 28px;
+  height: 28px;
   flex-shrink: 0;
-  transition: background 140ms ease, color 140ms ease;
 }
 
-.topbar-search-go:hover {
-  background: rgba(255, 255, 255, 0.1);
-  color: var(--text);
+.topbar-search .topbar-adblock .icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.9px;
 }
 
-.topbar-search-go .icon {
-  display: block;
-  width: 14px;
-  height: 14px;
-  stroke-width: 2px;
+.topbar-search .topbar-adblock:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
 }
