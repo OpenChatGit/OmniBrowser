@@ -19,27 +19,11 @@
   let entries = [];
   let query = "";
 
-  function nativeQuery(method, params = {}) {
-    return new Promise((resolve, reject) => {
-      if (typeof window.cefQuery !== "function") {
-        reject(new Error("Native bridge unavailable"));
-        return;
-      }
-      window.cefQuery({
-        request: JSON.stringify({ method, params }),
-        persistent: false,
-        onSuccess(response) {
-          try {
-            resolve(response ? JSON.parse(response) : null);
-          } catch (err) {
-            reject(err);
-          }
-        },
-        onFailure(code, message) {
-          reject(new Error(message || `Native error ${code}`));
-        },
-      });
-    });
+  function callNative(method, params = {}) {
+    if (!window.OmniBridge || typeof OmniBridge.call !== "function") {
+      return Promise.reject(new Error("Native bridge unavailable"));
+    }
+    return OmniBridge.call(method, params);
   }
 
   function faviconCandidates(url) {
@@ -128,7 +112,7 @@
       link.textContent = entry.title || entry.url;
       link.addEventListener("click", (event) => {
         event.preventDefault();
-        nativeQuery("browser.navigate", { url: entry.url }).catch(() => {
+        callNative("browser.navigate", { url: entry.url }).catch(() => {
           window.location.href = entry.url;
         });
       });
@@ -153,7 +137,7 @@
 
   async function loadEntries() {
     try {
-      const result = await nativeQuery("bookmarks.list", {});
+      const result = await callNative("bookmarks.list", {});
       entries = Array.isArray(result && result.entries) ? result.entries : [];
     } catch (_) {
       entries = [];
@@ -166,7 +150,7 @@
       return;
     }
     try {
-      await nativeQuery("bookmarks.remove", { url });
+      await callNative("bookmarks.remove", { url });
     } catch (_) {
       /* ignore */
     }
@@ -197,7 +181,7 @@
       return;
     }
     try {
-      await nativeQuery("bookmarks.clear", {});
+      await callNative("bookmarks.clear", {});
     } catch (_) {
       /* ignore */
     }

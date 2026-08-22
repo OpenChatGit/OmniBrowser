@@ -13,19 +13,13 @@
       typeof window.cefQuery === "function";
 
     let menuOpen = false;
-    // Native MenuClosed can fire just before the button click that toggles;
-    // suppress the immediate reopen.
-    let suppressReopenUntil = 0;
 
     function openMenu() {
       if (!hasNative) {
         return;
       }
-      if (window.OmniTooltip && typeof OmniTooltip.hide === "function") {
-        OmniTooltip.hide();
-      }
-      if (window.OmniBrowser && typeof OmniBrowser.releaseTabTip === "function") {
-        OmniBrowser.releaseTabTip();
+      if (window.OmniOverlayManager) {
+        OmniOverlayManager.prepareOpen(OmniOverlayManager.PANEL_MENU);
       }
       const rect = btn.getBoundingClientRect();
       OmniBridge.menuShow({
@@ -47,6 +41,9 @@
       }
       menuOpen = false;
       btn.setAttribute("aria-expanded", "false");
+      if (window.OmniOverlayManager) {
+        OmniOverlayManager.markClosed(OmniOverlayManager.PANEL_MENU);
+      }
       if (hasNative && typeof OmniBridge.menuHide === "function") {
         OmniBridge.menuHide().catch(() => {});
       }
@@ -184,7 +181,10 @@
         closeMenu();
         return;
       }
-      if (Date.now() < suppressReopenUntil) {
+      if (
+        window.OmniOverlayManager &&
+        OmniOverlayManager.shouldSuppressOpen(OmniOverlayManager.PANEL_MENU)
+      ) {
         return;
       }
       openMenu();
@@ -208,13 +208,21 @@
           if (menuOpen) {
             menuOpen = false;
             btn.setAttribute("aria-expanded", "false");
-            suppressReopenUntil = Date.now() + 250;
+            if (window.OmniOverlayManager) {
+              OmniOverlayManager.onNativeDismiss(OmniOverlayManager.PANEL_MENU);
+            }
           }
         }
         if (msg.type === "menu-command") {
           runCommand(msg.command);
         }
       }).catch(() => {});
+    }
+
+    if (window.OmniOverlayManager) {
+      OmniOverlayManager.register(OmniOverlayManager.PANEL_MENU, {
+        close: closeMenu,
+      });
     }
   }
 

@@ -1,6 +1,7 @@
 #include "omni/window_delegate.h"
 
 #include "include/views/cef_box_layout.h"
+#include "include/views/cef_fill_layout.h"
 #include "include/views/cef_overlay_controller.h"
 #include "omni/omni_handler.h"
 
@@ -144,6 +145,67 @@ bool OmniWindowDelegate::CanMinimize(CefRefPtr<CefWindow> window) {
   return true;
 }
 
+OmniDevToolsWindowDelegate::OmniDevToolsWindowDelegate(
+    CefRefPtr<CefBrowserView> view,
+    cef_runtime_style_t runtime_style)
+    : view_(view), runtime_style_(runtime_style) {}
+
+void OmniDevToolsWindowDelegate::OnWindowCreated(CefRefPtr<CefWindow> window) {
+  window->SetToFillLayout();
+  if (view_) {
+    window->AddChildView(view_);
+  }
+  window->SetTitle("DevTools");
+  window->Show();
+}
+
+void OmniDevToolsWindowDelegate::OnWindowDestroyed(CefRefPtr<CefWindow> window) {
+  (void)window;
+  view_ = nullptr;
+}
+
+bool OmniDevToolsWindowDelegate::CanClose(CefRefPtr<CefWindow> window) {
+  (void)window;
+  if (view_) {
+    if (auto browser = view_->GetBrowser()) {
+      return browser->GetHost()->TryCloseBrowser();
+    }
+  }
+  return true;
+}
+
+CefSize OmniDevToolsWindowDelegate::GetPreferredSize(CefRefPtr<CefView> view) {
+  (void)view;
+  return CefSize(1000, 760);
+}
+
+cef_runtime_style_t OmniDevToolsWindowDelegate::GetWindowRuntimeStyle() {
+  // DevTools frontend is Chrome WebUI. An Alloy window cannot host it and
+  // will take down the process when the inspector loads.
+  (void)runtime_style_;
+  return CEF_RUNTIME_STYLE_CHROME;
+}
+
+bool OmniDevToolsWindowDelegate::IsFrameless(CefRefPtr<CefWindow> window) {
+  (void)window;
+  return false;
+}
+
+bool OmniDevToolsWindowDelegate::CanResize(CefRefPtr<CefWindow> window) {
+  (void)window;
+  return true;
+}
+
+bool OmniDevToolsWindowDelegate::CanMaximize(CefRefPtr<CefWindow> window) {
+  (void)window;
+  return true;
+}
+
+bool OmniDevToolsWindowDelegate::CanMinimize(CefRefPtr<CefWindow> window) {
+  (void)window;
+  return true;
+}
+
 OmniBrowserViewDelegate::OmniBrowserViewDelegate(
     cef_runtime_style_t runtime_style,
     BrowserPane pane)
@@ -167,6 +229,22 @@ void OmniBrowserViewDelegate::OnBrowserDestroyed(
   }
 }
 
+CefRefPtr<CefBrowserViewDelegate>
+OmniBrowserViewDelegate::GetDelegateForPopupBrowserView(
+    CefRefPtr<CefBrowserView> browser_view,
+    const CefBrowserSettings& settings,
+    CefRefPtr<CefClient> client,
+    bool is_devtools) {
+  (void)browser_view;
+  (void)settings;
+  (void)client;
+  if (is_devtools) {
+    return new OmniBrowserViewDelegate(CEF_RUNTIME_STYLE_CHROME,
+                                       BrowserPane::DevTools);
+  }
+  return this;
+}
+
 bool OmniBrowserViewDelegate::OnPopupBrowserViewCreated(
     CefRefPtr<CefBrowserView> browser_view,
     CefRefPtr<CefBrowserView> popup_browser_view,
@@ -180,8 +258,15 @@ bool OmniBrowserViewDelegate::OnPopupBrowserViewCreated(
     }
     return true;
   }
-  CefWindow::CreateTopLevelWindow(new OmniWindowDelegate(
-      popup_browser_view, nullptr, nullptr, runtime_style_));
+  if (auto* handler = OmniHandler::GetInstance()) {
+    if (popup_browser_view) {
+      if (auto browser = popup_browser_view->GetBrowser()) {
+        handler->RegisterDevToolsBrowser(browser);
+      }
+    }
+  }
+  CefWindow::CreateTopLevelWindow(
+      new OmniDevToolsWindowDelegate(popup_browser_view, runtime_style_));
   return true;
 }
 
@@ -191,6 +276,9 @@ cef_runtime_style_t OmniBrowserViewDelegate::GetBrowserRuntimeStyle() {
 
 CefSize OmniBrowserViewDelegate::GetPreferredSize(CefRefPtr<CefView> view) {
   (void)view;
+  if (pane_ == BrowserPane::DevTools) {
+    return CefSize(1000, 760);
+  }
   if (pane_ == BrowserPane::Overlay) {
     // Actual bounds are controlled via CefOverlayController.
     return CefSize(244, 280);

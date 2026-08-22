@@ -60,6 +60,7 @@ set(OMNI_SRCS
   src/adblock/adblock_service.cpp
   src/adblock/adblock_resource_handler.cpp
   src/api/api_dispatcher.cpp
+  src/api/api_access.cpp
   src/api/register_apis.cpp
   src/api/handlers/adblock_api.cpp
   src/api/handlers/browser_api.cpp

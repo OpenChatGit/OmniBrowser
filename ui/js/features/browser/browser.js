@@ -94,6 +94,10 @@
       window.OmniBridge &&
       typeof window.OmniBridge.browserNavigate === "function";
 
+    function usesNativeStore() {
+      return hasNative && !isPrivate;
+    }
+
     let seq = 0;
     /** @type {{ id: string, title: string, history: string[], index: number }[]} */
     let tabs = [];
@@ -179,6 +183,9 @@
     }
 
     function saveBookmarks() {
+      if (usesNativeStore()) {
+        return;
+      }
       try {
         localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarkEntries));
       } catch (_) {
@@ -299,7 +306,9 @@
               ts: Number(entry.ts) || 0,
             }))
             .slice(0, MAX_BOOKMARKS);
-          saveBookmarks();
+          if (!usesNativeStore()) {
+            saveBookmarks();
+          }
           syncBookmarkButton();
         })
         .catch(() => {});
@@ -307,6 +316,9 @@
 
     function loadVisitHistory() {
       if (isPrivate) {
+        return [];
+      }
+      if (usesNativeStore()) {
         return [];
       }
       try {
@@ -335,7 +347,7 @@
     }
 
     function saveVisitHistory() {
-      if (isPrivate) {
+      if (isPrivate || usesNativeStore()) {
         return;
       }
       try {
@@ -442,6 +454,38 @@
           } catch (_) {
             /* ignore */
           }
+          pullVisitHistoryFromNative();
+        })
+        .catch(() => {});
+    }
+
+    function pullVisitHistoryFromNative() {
+      if (
+        !hasNative ||
+        !window.OmniBridge ||
+        typeof OmniBridge.historyList !== "function"
+      ) {
+        return;
+      }
+      OmniBridge.historyList()
+        .then((result) => {
+          if (!result || !Array.isArray(result.entries)) {
+            return;
+          }
+          visitHistory = result.entries
+            .filter(
+              (entry) =>
+                entry &&
+                typeof entry.url === "string" &&
+                entry.url &&
+                !isBlankUrl(entry.url)
+            )
+            .map((entry) => ({
+              url: entry.url,
+              title: String(entry.title || titleFromUrl(entry.url)),
+              ts: Number(entry.ts) || 0,
+            }))
+            .slice(0, MAX_VISIT_HISTORY);
         })
         .catch(() => {});
     }
@@ -492,30 +536,42 @@
     }
 
     function restoreClosedTab(closedId) {
-      const index = closedTabs.findIndex((entry) => entry.id === closedId);
-      const entry = index >= 0 ? closedTabs[index] : closedTabs[0];
-      if (!entry) {
+      if (!closedTabs.length) {
         return false;
       }
-      if (index >= 0) {
-        closedTabs.splice(index, 1);
-      } else {
-        closedTabs.shift();
+      let target = null;
+      if (closedId) {
+        const idx = closedTabs.findIndex((t) => t.id === closedId);
+        if (idx >= 0) {
+          target = closedTabs.splice(idx, 1)[0];
+        }
+      }
+      if (!target) {
+        target = closedTabs.shift();
+      }
+      if (!target) {
+        return false;
       }
       saveClosedTabs();
-      const tab = createTab();
-      tab.title = entry.title || "New Tab";
-      tab.history = Array.isArray(entry.history) ? entry.history.slice() : [];
-      tab.index =
-        tab.history.length === 0
-          ? -1
-          : Math.min(
-              tab.history.length - 1,
-              Math.max(0, Number.isInteger(entry.index) ? entry.index : 0)
-            );
+      seq += 1;
+      const history = Array.isArray(target.history) ? [...target.history] : [];
+      const tab = {
+        id: `tab-${seq}`,
+        title: target.title || "New Tab",
+        history,
+        index:
+          history.length === 0
+            ? -1
+            : Math.min(
+                history.length - 1,
+                Math.max(0, Number.isInteger(target.index) ? target.index : 0)
+              ),
+        contentLive: false,
+      };
       tabs.push(tab);
       activeId = tab.id;
       applyActiveTab();
+      renderTabs();
       scheduleSaveSession();
       return true;
     }
@@ -545,13 +601,27 @@
             const history = Array.isArray(tab.history)
               ? tab.history.filter((entry) => typeof entry === "string")
               : [];
-            const trimmed =
+            const currentUrl =
+              Number.isInteger(tab.index) && tab.index >= 0
+                ? history[tab.index] || ""
+                : "";
+            let trimmed =
               history.length > MAX_TAB_HISTORY
                 ? history.slice(history.length - MAX_TAB_HISTORY)
-                : history;
+                : history.slice();
             let index = Number.isInteger(tab.index) ? tab.index : -1;
             if (trimmed.length === 0) {
               index = -1;
+            } else if (
+              currentUrl &&
+              history.length > trimmed.length &&
+              !trimmed.includes(currentUrl)
+            ) {
+              trimmed.push(currentUrl);
+              if (trimmed.length > MAX_TAB_HISTORY) {
+                trimmed = trimmed.slice(trimmed.length - MAX_TAB_HISTORY);
+              }
+              index = trimmed.length - 1;
             } else if (history.length > trimmed.length) {
               index = Math.min(
                 trimmed.length - 1,
@@ -559,6 +629,12 @@
               );
             } else {
               index = Math.min(trimmed.length - 1, Math.max(-1, index));
+            }
+            if (currentUrl) {
+              const at = trimmed.indexOf(currentUrl);
+              if (at >= 0) {
+                index = at;
+              }
             }
             return {
               id: String(tab.id),
@@ -655,6 +731,21 @@
 
     function activeTab() {
       return tabs.find((tab) => tab.id === activeId) || null;
+    }
+
+    /** Only replace titles that are still hostname placeholders. */
+    function setProvisionalTitle(tab, url, previousUrl) {
+      if (!tab || !url || url === "about:blank") {
+        return;
+      }
+      const prev = previousUrl || "";
+      if (
+        !tab.title ||
+        tab.title === "New Tab" ||
+        (prev && tab.title === titleFromUrl(prev))
+      ) {
+        tab.title = titleFromUrl(url);
+      }
     }
 
     function currentUrl() {
@@ -1062,8 +1153,7 @@
         btn.dataset.tabId = tab.id;
 
         const url = tab.index >= 0 ? tab.history[tab.index] : "";
-        const title = normalizeTabTitle(tab.title, url);
-        tab.title = title;
+        const displayTitle = normalizeTabTitle(tab.title, url);
 
         const favicon = document.createElement("img");
         favicon.className = "titlebar-tab-favicon";
@@ -1074,7 +1164,7 @@
 
         const label = document.createElement("span");
         label.className = "titlebar-tab-label";
-        label.textContent = formatTabTitle(title);
+        label.textContent = formatTabTitle(displayTitle);
 
         const close = document.createElement("button");
         close.type = "button";
@@ -1790,6 +1880,15 @@
       rememberVisit(url, tab.title);
     }
 
+    function ensureNativeTabs() {
+      if (!hasNative || typeof OmniBridge.browserEnsureTab !== "function") {
+        return;
+      }
+      for (const tab of tabs) {
+        OmniBridge.browserEnsureTab(tab.id).catch(() => {});
+      }
+    }
+
     function applyActiveTab() {
       const tab = activeTab();
       if (!tab) {
@@ -1845,6 +1944,7 @@
       if (!tab || !url) {
         return;
       }
+      const previousUrl = tab.index >= 0 ? tab.history[tab.index] : "";
       const serial = ++navSerial;
       pendingTraverse = 0;
       if (push) {
@@ -1852,7 +1952,7 @@
       } else {
         lastPushedUrl = url;
       }
-      tab.title = titleFromUrl(url);
+      setProvisionalTitle(tab, url, previousUrl);
       tab.contentLive = true;
       syncSearchFields(url);
       syncSearchBarIcon();
@@ -2076,39 +2176,6 @@
       scheduleSaveSession();
     }
 
-    function restoreClosedTab(closedId) {
-      if (!closedTabs.length) {
-        return;
-      }
-      let target = null;
-      if (closedId) {
-        const idx = closedTabs.findIndex((t) => t.id === closedId);
-        if (idx >= 0) {
-          target = closedTabs.splice(idx, 1)[0];
-        }
-      }
-      if (!target) {
-        target = closedTabs.shift();
-      }
-      if (!target) {
-        return;
-      }
-      saveClosedTabs();
-      seq += 1;
-      const tab = {
-        id: `tab-${seq}`,
-        title: target.title || "New Tab",
-        history: Array.isArray(target.history) ? [...target.history] : [],
-        index: Number.isInteger(target.index) ? target.index : -1,
-        contentLive: false,
-      };
-      tabs.push(tab);
-      activeId = tab.id;
-      applyActiveTab();
-      renderTabs();
-      scheduleSaveSession();
-    }
-
     function listHistory() {
       return visitHistory.map((entry) => ({
         url: entry.url,
@@ -2229,11 +2296,12 @@
           }
         }
         if (msg.url && tab && msg.url !== "about:blank") {
+          const previousUrl = tab.index >= 0 ? tab.history[tab.index] : "";
           const mode = pendingTraverse > 0 ? "traverse" : "push";
           if (isActiveEvent) {
             recordHistory(msg.url, mode);
           }
-          tab.title = titleFromUrl(msg.url);
+          setProvisionalTitle(tab, msg.url, previousUrl);
           if (isActiveEvent) {
             syncSearchFields(msg.url);
           }
@@ -2248,6 +2316,7 @@
       if (msg.type === "address") {
         const url = msg.url || "";
         if (tab && url && url !== "about:blank") {
+          const previousUrl = tab.index >= 0 ? tab.history[tab.index] : "";
           if (isActiveEvent) {
             const traversing = pendingTraverse > 0;
             if (traversing) {
@@ -2256,7 +2325,7 @@
             recordHistory(url, traversing ? "traverse" : "push");
             syncSearchFields(url);
           }
-          tab.title = titleFromUrl(url);
+          setProvisionalTitle(tab, url, previousUrl);
           renderTabs();
           scheduleSaveSession();
         }
@@ -2268,6 +2337,7 @@
       if (msg.type === "loading") {
         if (msg.url && tab && msg.url !== "about:blank" && !msg.loading) {
           if (tab.index >= 0 && !urlsMatch(tab.history[tab.index], msg.url)) {
+            const previousUrl = tab.index >= 0 ? tab.history[tab.index] : "";
             if (isActiveEvent) {
               const mode = pendingTraverse > 0 ? "traverse" : "push";
               if (pendingTraverse > 0) {
@@ -2276,7 +2346,7 @@
               recordHistory(msg.url, mode);
               syncSearchFields(msg.url);
             }
-            tab.title = titleFromUrl(msg.url);
+            setProvisionalTitle(tab, msg.url, previousUrl);
             renderTabs();
             scheduleSaveSession();
           }
@@ -2291,9 +2361,11 @@
           tab.index >= 0 ? tab.history[tab.index] || "" : currentUrl();
         if (isBlankUrl(msg.title) || /^about:blank$/i.test(String(msg.title))) {
           if (isStartTab(tab) || isBlankUrl(url)) {
-            tab.title = "New Tab";
-            renderTabs();
-            scheduleSaveSession();
+            if (!tab.title || tab.title === "New Tab") {
+              tab.title = "New Tab";
+              renderTabs();
+              scheduleSaveSession();
+            }
           }
           return;
         }
@@ -2336,14 +2408,8 @@
       if (msg.type === "overlay" && msg.visible === false) {
         tabTipOverlayOpen = false;
         tabTipDataKey = "";
-        if (window.OmniMedia && typeof OmniMedia.onOverlayClosed === "function") {
-          OmniMedia.onOverlayClosed();
-        }
-        if (
-          window.OmniAdblock &&
-          typeof OmniAdblock.onOverlayClosed === "function"
-        ) {
-          OmniAdblock.onOverlayClosed();
+        if (window.OmniOverlayManager) {
+          OmniOverlayManager.onNativeDismissAll();
         }
         if (tabTipId && usesOverlayTabTip()) {
           tabTipId = null;
@@ -2612,18 +2678,22 @@
     bindNativeEvents();
     migrateVisitHistoryToNative();
     migrateBookmarksToNative();
+    pullVisitHistoryFromNative();
     pullBookmarksFromNative();
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
+        pullVisitHistoryFromNative();
         pullBookmarksFromNative();
       }
     });
-    window.addEventListener("storage", (event) => {
-      if (event && event.key === BOOKMARKS_KEY) {
-        bookmarkEntries = loadBookmarks();
-        syncBookmarkButton();
-      }
-    });
+    if (!usesNativeStore()) {
+      window.addEventListener("storage", (event) => {
+        if (event && event.key === BOOKMARKS_KEY) {
+          bookmarkEntries = loadBookmarks();
+          syncBookmarkButton();
+        }
+      });
+    }
 
     const bootPending =
       hasNative && typeof OmniBridge.tabConsumePending === "function"
@@ -2632,15 +2702,24 @@
 
     bootPending.then((pending) => {
       if (pending && pending.tab) {
-        tabs = [];
-        activeId = "";
+        const hadSession = restoreSession();
+        if (!hadSession) {
+          tabs = [];
+          activeId = "";
+        }
         adoptTransferredTab(pending.tab, { activate: true });
+        ensureNativeTabs();
         return;
       }
       if (restoreSession()) {
+        ensureNativeTabs();
+        const restoredActiveId = activeId;
         // Let the seed content browser finish OnAfterCreated before LoadURL.
-        // Immediate restore of YouTube (or similar) raced CEF and crashed.
-        window.setTimeout(() => applyActiveTab(), 150);
+        window.setTimeout(() => {
+          if (activeId === restoredActiveId) {
+            applyActiveTab();
+          }
+        }, 150);
       } else {
         openTab();
       }

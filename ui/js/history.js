@@ -61,27 +61,11 @@
     lastCheckedIndex = index;
   }
 
-  function nativeQuery(method, params = {}) {
-    return new Promise((resolve, reject) => {
-      if (typeof window.cefQuery !== "function") {
-        reject(new Error("Native bridge unavailable"));
-        return;
-      }
-      window.cefQuery({
-        request: JSON.stringify({ method, params }),
-        persistent: false,
-        onSuccess(response) {
-          try {
-            resolve(response ? JSON.parse(response) : null);
-          } catch (err) {
-            reject(err);
-          }
-        },
-        onFailure(code, message) {
-          reject(new Error(message || `Native error ${code}`));
-        },
-      });
-    });
+  function callNative(method, params = {}) {
+    if (!window.OmniBridge || typeof OmniBridge.call !== "function") {
+      return Promise.reject(new Error("Native bridge unavailable"));
+    }
+    return OmniBridge.call(method, params);
   }
 
   function faviconCandidates(url) {
@@ -275,7 +259,7 @@
       link.textContent = entry.title || entry.url;
       link.addEventListener("click", (event) => {
         event.preventDefault();
-        nativeQuery("browser.navigate", { url: entry.url }).catch(() => {
+        callNative("browser.navigate", { url: entry.url }).catch(() => {
           window.location.href = entry.url;
         });
       });
@@ -322,7 +306,7 @@
 
   async function loadEntries() {
     try {
-      const result = await nativeQuery("history.list", {});
+      const result = await callNative("history.list", {});
       entries = Array.isArray(result && result.entries) ? result.entries : [];
     } catch (_) {
       entries = [];
@@ -334,7 +318,7 @@
     const unique = Array.from(new Set(urls.filter(Boolean)));
     for (const url of unique) {
       try {
-        await nativeQuery("history.remove", { url });
+        await callNative("history.remove", { url });
       } catch (_) {
         /* ignore */
       }
@@ -370,7 +354,7 @@
       return;
     }
     try {
-      await nativeQuery("history.clear", {});
+      await callNative("history.clear", {});
     } catch (_) {
       /* ignore */
     }

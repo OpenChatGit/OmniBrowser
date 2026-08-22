@@ -23,6 +23,7 @@ enum CommandId : int {
   kOpenInfo = 1009,
   kToggleAdblock = 1010,
   kToggleAdblockAggressive = 1011,
+  kToggleDevTools = 1012,
 };
 
 }  // namespace
@@ -88,6 +89,10 @@ CefRefPtr<CefMenuModel> AppMenuDelegate::Build() {
 
   menu->AddSeparator();
 
+  menu->AddItem(kToggleDevTools, "Dev Tools");
+  bind(kToggleDevTools, Json{{"action", "toggle-devtools"}});
+  menu->SetAccelerator(kToggleDevTools, 'I', true, true, false);
+
   menu->AddItem(kOpenInfo, "Info");
   bind(kOpenInfo, Json{{"action", "open-info"}});
 
@@ -119,6 +124,12 @@ void AppMenuDelegate::ExecuteCommand(CefRefPtr<CefMenuModel> menu_model,
     Emit(Json{{"action", "adblock-changed"},
               {"enabled", adblock.enabled()},
               {"aggressive", adblock.aggressive()}});
+    return;
+  }
+  if (command_id == kToggleDevTools) {
+    if (owner_) {
+      owner_->ToggleDevTools();
+    }
     return;
   }
   if (paths::IsPrivateMode() &&

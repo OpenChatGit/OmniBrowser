@@ -118,6 +118,10 @@ class OmniHandler : public CefClient,
   void CancelAppMenu();
   void OnAppMenuClosed();
   void EmitMenuCommand(const Json& command);
+  void ToggleDevTools();
+  void ShowDevToolsNow();
+  void RegisterDevToolsBrowser(CefRefPtr<CefBrowser> browser);
+  bool IsDevToolsBrowser(CefRefPtr<CefBrowser> browser) const;
   void ShowHistoryFlyout(const nlohmann::json& recent_tabs);
   void HideHistoryFlyout();
   void HandleOverlayCommand(const Json& command);
@@ -286,6 +290,8 @@ class OmniHandler : public CefClient,
   std::string active_tab_id_;
   // URL to load once a newly created content browser finishes OnAfterCreated.
   std::map<std::string, std::string> pending_content_urls_;
+  // Drop stale events while a recycled view navigates to about:blank.
+  std::unordered_set<int> recycling_content_browser_ids_;
   std::map<std::string, bool> tab_audio_playing_;
   std::map<std::string, Json> tab_media_;
   CefRefPtr<CefMenuButton> app_menu_button_;
@@ -324,6 +330,7 @@ class OmniHandler : public CefClient,
   int shell_browser_id_ = -1;
   int overlay_browser_id_ = -1;
   std::unordered_set<int> content_browser_ids_;
+  std::unordered_set<int> devtools_browser_ids_;
 
   IMPLEMENT_REFCOUNTING(OmniHandler);
 };

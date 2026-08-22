@@ -1,6 +1,7 @@
 #include "omni/library_ipc.h"
 
 #include "include/wrapper/cef_helpers.h"
+#include "omni/api/api_access.h"
 #include "omni/api/api_dispatcher.h"
 #include "omni/api/register_apis.h"
 #include "omni/omni_handler.h"
@@ -41,6 +42,11 @@ class LibraryIpcHandler : public CefMessageRouterBrowserSide::Handler {
     ctx.query_id = query_id;
     ctx.persistent = persistent;
     ctx.cef_callback = callback;
+
+    if (!ApiAccessAllowed(ctx)) {
+      callback->Failure(403, "Forbidden: " + method);
+      return true;
+    }
 
     CefApiResponder responder(callback);
     if (!ApiDispatcher::Get().Dispatch(method, ctx, params, responder)) {

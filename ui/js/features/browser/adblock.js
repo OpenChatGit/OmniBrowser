@@ -134,13 +134,20 @@
       }).catch(() => {});
     }
 
-    function hideOverlay() {
+    function markClosed() {
       open = false;
-      syncButton();
       if (pollTimer) {
         clearInterval(pollTimer);
         pollTimer = null;
       }
+      syncButton();
+      if (window.OmniOverlayManager) {
+        OmniOverlayManager.markClosed(OmniOverlayManager.PANEL_ADBLOCK);
+      }
+    }
+
+    function hideOverlay() {
+      markClosed();
       if (fallbackPanel) {
         fallbackPanel.hidden = true;
       }
@@ -164,14 +171,8 @@
 
     function setOpen(next) {
       if (next) {
-        if (window.OmniTooltip && typeof OmniTooltip.hide === "function") {
-          OmniTooltip.hide();
-        }
-        if (
-          window.OmniBrowser &&
-          typeof OmniBrowser.releaseTabTip === "function"
-        ) {
-          OmniBrowser.releaseTabTip();
+        if (window.OmniOverlayManager) {
+          OmniOverlayManager.prepareOpen(OmniOverlayManager.PANEL_ADBLOCK);
         }
         open = true;
         syncButton();
@@ -217,7 +218,17 @@
     btn.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      setOpen(!open);
+      if (open) {
+        hideOverlay();
+        return;
+      }
+      if (
+        window.OmniOverlayManager &&
+        OmniOverlayManager.shouldSuppressOpen(OmniOverlayManager.PANEL_ADBLOCK)
+      ) {
+        return;
+      }
+      setOpen(true);
     });
 
     document.addEventListener("keydown", (event) => {
@@ -241,7 +252,13 @@
           await refresh();
           // Live total while the card is visible.
           statsTimer = setInterval(() => {
-            refresh().catch(() => {});
+            if (window.OmniOverlayManager) {
+      OmniOverlayManager.register(OmniOverlayManager.PANEL_ADBLOCK, {
+        close: markClosed,
+      });
+    }
+
+    refresh().catch(() => {});
           }, 2000);
         }
       });
@@ -250,13 +267,9 @@
     window.OmniAdblock = {
       refresh,
       closePanel: hideOverlay,
+      markClosed,
       onOverlayClosed() {
-        open = false;
-        if (pollTimer) {
-          clearInterval(pollTimer);
-          pollTimer = null;
-        }
-        syncButton();
+        markClosed();
       },
       applyPrefs(next) {
         if (next && typeof next === "object") {

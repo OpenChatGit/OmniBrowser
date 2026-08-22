@@ -132,11 +132,18 @@
     }).catch(() => {});
   }
 
-  function hideOverlay() {
+  function markClosed() {
     open = false;
     if (btn) {
       btn.setAttribute("aria-expanded", "false");
     }
+    if (window.OmniOverlayManager) {
+      OmniOverlayManager.markClosed(OmniOverlayManager.PANEL_MEDIA);
+    }
+  }
+
+  function hideOverlay() {
+    markClosed();
     if (usesOverlay() && typeof OmniBridge.overlayHide === "function") {
       OmniBridge.overlayHide().catch(() => {});
     }
@@ -145,6 +152,9 @@
   function setOpen(next) {
     const state = pickPrimary();
     if (next && state) {
+      if (window.OmniOverlayManager) {
+        OmniOverlayManager.prepareOpen(OmniOverlayManager.PANEL_MEDIA);
+      }
       open = true;
       primaryTabId = state.tabId;
       if (btn) {
@@ -283,10 +293,7 @@
   }
 
   function onOverlayClosed() {
-    open = false;
-    if (btn) {
-      btn.setAttribute("aria-expanded", "false");
-    }
+    markClosed();
   }
 
   function jumpToMediaTab() {
@@ -346,6 +353,12 @@
   }
 
   function boot() {
+    if (window.OmniOverlayManager) {
+      OmniOverlayManager.register(OmniOverlayManager.PANEL_MEDIA, {
+        close: markClosed,
+      });
+    }
+
     if (btn) {
       mountIcon(btn, "music");
       if (wrap) {
@@ -359,7 +372,17 @@
         if (wrap && wrap.hidden) {
           return;
         }
-        setOpen(!open);
+        if (open) {
+          hideOverlay();
+          return;
+        }
+        if (
+          window.OmniOverlayManager &&
+          OmniOverlayManager.shouldSuppressOpen(OmniOverlayManager.PANEL_MEDIA)
+        ) {
+          return;
+        }
+        setOpen(true);
       });
     }
 
@@ -380,6 +403,7 @@
     syncStartBar,
     syncAll,
     onOverlayClosed,
+    markClosed,
     isOpen: () => open,
     getPrimarySession: pickPrimary,
   };

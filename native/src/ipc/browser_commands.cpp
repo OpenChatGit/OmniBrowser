@@ -183,6 +183,11 @@ bool HandleBrowserCommand(
   }
 
   if (method == "browser.mediaControl") {
+    if (!owner->IsShellBrowser(browser) &&
+        !owner->IsOverlayBrowser(browser)) {
+      callback->Failure(403, "browser.mediaControl is shell-only");
+      return true;
+    }
     const std::string tab_id = params.value("tabId", "");
     const std::string action = params.value("action", "");
     const double value = params.value("value", 0.0);

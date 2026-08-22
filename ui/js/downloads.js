@@ -10,27 +10,11 @@
   let entries = [];
   let query = "";
 
-  function nativeQuery(method, params = {}) {
-    return new Promise((resolve, reject) => {
-      if (typeof window.cefQuery !== "function") {
-        reject(new Error("Native bridge unavailable"));
-        return;
-      }
-      window.cefQuery({
-        request: JSON.stringify({ method, params }),
-        persistent: false,
-        onSuccess(response) {
-          try {
-            resolve(response ? JSON.parse(response) : null);
-          } catch (err) {
-            reject(err);
-          }
-        },
-        onFailure(code, message) {
-          reject(new Error(message || `Native error ${code}`));
-        },
-      });
-    });
+  function callNative(method, params = {}) {
+    if (!window.OmniBridge || typeof OmniBridge.call !== "function") {
+      return Promise.reject(new Error("Native bridge unavailable"));
+    }
+    return OmniBridge.call(method, params);
   }
 
   function extensionOf(name) {
@@ -423,7 +407,7 @@
         from.addEventListener("click", (event) => {
           event.preventDefault();
           const target = source.href || source.display;
-          nativeQuery("browser.navigate", { url: target }).catch(() => {
+          callNative("browser.navigate", { url: target }).catch(() => {
             window.location.href = target;
           });
         });
@@ -446,7 +430,7 @@
           if (!entry.path) {
             return;
           }
-          nativeQuery("downloads.showInFolder", { path: entry.path }).catch(
+          callNative("downloads.showInFolder", { path: entry.path }).catch(
             () => {}
           );
         }),
@@ -463,7 +447,7 @@
 
   async function loadEntries({ quiet = false } = {}) {
     try {
-      const result = await nativeQuery("downloads.list", {});
+      const result = await callNative("downloads.list", {});
       entries = Array.isArray(result && result.entries) ? result.entries : [];
     } catch (_) {
       if (!quiet) {
@@ -477,7 +461,7 @@
     const unique = Array.from(new Set(ids.filter(Boolean)));
     for (const id of unique) {
       try {
-        await nativeQuery("downloads.remove", { id });
+        await callNative("downloads.remove", { id });
       } catch (_) {
         /* ignore */
       }
@@ -509,7 +493,7 @@
       return;
     }
     try {
-      await nativeQuery("downloads.clear", {});
+      await callNative("downloads.clear", {});
     } catch (_) {
       /* ignore */
     }

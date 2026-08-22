@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "include/cef_app.h"
+#include "include/cef_browser.h"
 #include "include/cef_parser.h"
 #include "include/base/cef_callback.h"
 #include "include/views/cef_box_layout.h"
@@ -43,6 +44,11 @@ namespace omni {
 namespace {
 
 OmniHandler* g_instance = nullptr;
+
+bool IsDevToolsUrl(const std::string& url) {
+  return url.rfind("devtools:", 0) == 0 ||
+         url.rfind("chrome-devtools:", 0) == 0;
+}
 
 std::string GetDataURI(const std::string& data, const std::string& mime_type) {
   return "data:" + mime_type + ";base64," +
@@ -130,6 +136,9 @@ bool OmniHandler::IsContentBrowser(CefRefPtr<CefBrowser> browser) const {
   }
   {
     std::lock_guard<std::mutex> lock(browser_ids_mu_);
+    if (devtools_browser_ids_.count(browser->GetIdentifier()) > 0) {
+      return false;
+    }
     if (content_browser_ids_.count(browser->GetIdentifier()) > 0) {
       return true;
     }
@@ -155,7 +164,8 @@ bool OmniHandler::ShouldFilterNetwork(CefRefPtr<CefBrowser> browser) const {
   }
   const int id = browser->GetIdentifier();
   std::lock_guard<std::mutex> lock(browser_ids_mu_);
-  if (id == shell_browser_id_ || id == overlay_browser_id_) {
+  if (id == shell_browser_id_ || id == overlay_browser_id_ ||
+      devtools_browser_ids_.count(id) > 0) {
     return false;
   }
   // Known content pane, or any unknown browser (popups, recycled views):
@@ -180,7 +190,13 @@ void OmniHandler::RegisterBrowserPane(CefRefPtr<CefBrowser> browser,
       content_browser_ids_.erase(id);
       break;
     case BrowserPane::Content:
-      content_browser_ids_.insert(id);
+      if (devtools_browser_ids_.count(id) == 0) {
+        content_browser_ids_.insert(id);
+      }
+      break;
+    case BrowserPane::DevTools:
+      devtools_browser_ids_.insert(id);
+      content_browser_ids_.erase(id);
       break;
   }
 }
@@ -198,6 +214,33 @@ void OmniHandler::UnregisterBrowserPane(CefRefPtr<CefBrowser> browser) {
   if (overlay_browser_id_ == id) {
     overlay_browser_id_ = -1;
   }
+  devtools_browser_ids_.erase(id);
+}
+
+void OmniHandler::RegisterDevToolsBrowser(CefRefPtr<CefBrowser> browser) {
+  if (!browser) {
+    return;
+  }
+  const int id = browser->GetIdentifier();
+  std::lock_guard<std::mutex> lock(browser_ids_mu_);
+  devtools_browser_ids_.insert(id);
+  content_browser_ids_.erase(id);
+}
+
+bool OmniHandler::IsDevToolsBrowser(CefRefPtr<CefBrowser> browser) const {
+  if (!browser) {
+    return false;
+  }
+  {
+    std::lock_guard<std::mutex> lock(browser_ids_mu_);
+    if (devtools_browser_ids_.count(browser->GetIdentifier()) > 0) {
+      return true;
+    }
+  }
+  if (auto frame = browser->GetMainFrame()) {
+    return IsDevToolsUrl(frame->GetURL().ToString());
+  }
+  return false;
 }
 
 void OmniHandler::TrackBrowserIdentity(CefRefPtr<CefBrowser> browser) {
@@ -225,6 +268,10 @@ void OmniHandler::TrackBrowserIdentity(CefRefPtr<CefBrowser> browser) {
       }
     }
   }
+  if (devtools_browser_ids_.count(id) > 0) {
+    content_browser_ids_.erase(id);
+    return;
+  }
   if (!TabIdForContentBrowser(browser).empty()) {
     content_browser_ids_.insert(id);
     return;
@@ -251,6 +298,7 @@ void OmniHandler::UntrackBrowserIdentity(CefRefPtr<CefBrowser> browser) {
   if (overlay_browser_id_ == id) {
     overlay_browser_id_ = -1;
   }
+  devtools_browser_ids_.erase(id);
 }
 
 bool OmniHandler::IsShellBrowser(CefRefPtr<CefBrowser> browser) const {
@@ -309,6 +357,18 @@ bool OmniHandler::EnsureContentTab(const std::string& tab_id) {
   if (unbound_content_view_) {
     view = unbound_content_view_;
     unbound_content_view_ = nullptr;
+    if (auto browser = view->GetBrowser()) {
+      recycling_content_browser_ids_.insert(browser->GetIdentifier());
+      if (browser->IsLoading()) {
+        browser->StopLoad();
+      }
+      if (auto frame = browser->GetMainFrame()) {
+        const std::string current = frame->GetURL().ToString();
+        if (current != "about:blank") {
+          frame->LoadURL("about:blank");
+        }
+      }
+    }
   } else {
     if (!shell_browser_view_) {
       return false;
@@ -395,6 +455,10 @@ void OmniHandler::CloseContentTab(const std::string& tab_id) {
     // content browser and immediately creating another often crashes CEF.
     if (!unbound_content_view_) {
       if (auto browser = view->GetBrowser()) {
+        recycling_content_browser_ids_.insert(browser->GetIdentifier());
+        if (browser->IsLoading()) {
+          browser->StopLoad();
+        }
         if (auto frame = browser->GetMainFrame()) {
           frame->LoadURL("about:blank");
         }
@@ -482,6 +546,17 @@ bool OmniHandler::ContentNavigate(const std::string& url,
     active_tab_id_ = id;
     content_visible_ = true;
     LayoutContentBrowser();
+    const std::string tab_copy = id;
+    CefPostDelayedTask(
+        TID_UI,
+        base::BindOnce(
+            [](std::string tab_id) {
+              if (auto* handler = OmniHandler::GetInstance()) {
+                handler->FlushPendingContentUrl(tab_id);
+              }
+            },
+            tab_copy),
+        5000);
     return true;
   }
 
@@ -576,19 +651,28 @@ bool OmniHandler::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
   (void)os_event;
   (void)is_keyboard_shortcut;
 
-  if (!browser || !IsContentBrowser(browser)) {
+  if (!browser) {
     return false;
   }
   if (event.type != KEYEVENT_RAWKEYDOWN && event.type != KEYEVENT_KEYDOWN) {
     return false;
   }
-  if (!content_visible_) {
-    return false;
-  }
 
   const bool ctrl = (event.modifiers & EVENTFLAG_CONTROL_DOWN) != 0;
   const bool shift = (event.modifiers & EVENTFLAG_SHIFT_DOWN) != 0;
+  const bool alt = (event.modifiers & EVENTFLAG_ALT_DOWN) != 0;
   const int key = event.windows_key_code;
+
+  if (!IsDevToolsBrowser(browser) &&
+      (key == VK_F12 ||
+       (ctrl && shift && !alt && (key == 'I' || key == 'i')))) {
+    ToggleDevTools();
+    return true;
+  }
+
+  if (!IsContentBrowser(browser) || !content_visible_) {
+    return false;
+  }
 
   bool hard = false;
   bool reload = false;
@@ -605,6 +689,46 @@ bool OmniHandler::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
   }
   ContentReload(hard);
   return true;
+}
+
+void OmniHandler::ToggleDevTools() {
+  CEF_REQUIRE_UI_THREAD();
+  // MenuButton::ExecuteCommand runs while the native menu is still tearing
+  // down. Creating a top-level window in that stack can close the host.
+  CefPostTask(TID_UI, base::BindOnce([]() {
+                if (auto* self = OmniHandler::GetInstance()) {
+                  self->ShowDevToolsNow();
+                }
+              }));
+}
+
+void OmniHandler::ShowDevToolsNow() {
+  CEF_REQUIRE_UI_THREAD();
+  CefRefPtr<CefBrowser> browser;
+  if (content_visible_) {
+    browser = ContentBrowser();
+  }
+  if (!browser && shell_browser_view_) {
+    browser = shell_browser_view_->GetBrowser();
+  }
+  if (!browser) {
+    return;
+  }
+  auto host = browser->GetHost();
+  if (!host) {
+    return;
+  }
+  if (host->HasDevTools()) {
+    host->CloseDevTools();
+    return;
+  }
+  CefWindowInfo window_info;
+#if defined(OS_WIN)
+  window_info.SetAsPopup(nullptr, "DevTools");
+#endif
+  window_info.runtime_style = CEF_RUNTIME_STYLE_CHROME;
+  CefBrowserSettings settings;
+  host->ShowDevTools(window_info, this, settings, CefPoint());
 }
 
 void OmniHandler::ContentStop() {
@@ -1114,14 +1238,42 @@ void OmniHandler::ForceCloseAuxiliaryBrowsers() {
   tab_media_.clear();
   pending_content_urls_.clear();
 
+  if (shell_browser_view_) {
+    if (auto shell = shell_browser_view_->GetBrowser()) {
+      if (auto host = shell->GetHost()) {
+        if (host->HasDevTools()) {
+          host->CloseDevTools();
+        }
+      }
+    }
+  }
   for (const auto& view : views) {
     if (auto content = view->GetBrowser()) {
-      content->GetHost()->CloseBrowser(true);
+      if (auto host = content->GetHost()) {
+        if (host->HasDevTools()) {
+          host->CloseDevTools();
+        }
+        host->CloseBrowser(true);
+      }
     }
   }
   if (overlay_browser_view_) {
     if (auto overlay = overlay_browser_view_->GetBrowser()) {
       overlay->GetHost()->CloseBrowser(true);
+    }
+  }
+
+  std::vector<CefRefPtr<CefBrowser>> extras;
+  extras.reserve(browsers_.size());
+  for (const auto& extra : browsers_) {
+    if (extra && !IsShellBrowser(extra) && !IsContentBrowser(extra) &&
+        !IsOverlayBrowser(extra)) {
+      extras.push_back(extra);
+    }
+  }
+  for (const auto& extra : extras) {
+    if (auto host = extra->GetHost()) {
+      host->CloseBrowser(true);
     }
   }
 }
@@ -1273,7 +1425,9 @@ Json OmniHandler::ContentStateJson() const {
   bool can_forward = false;
   bool loading = false;
   if (browser) {
-    url = browser->GetMainFrame()->GetURL().ToString();
+    if (auto frame = browser->GetMainFrame()) {
+      url = frame->GetURL().ToString();
+    }
     can_back = browser->CanGoBack();
     can_forward = browser->CanGoForward();
     loading = browser->IsLoading();
@@ -1518,6 +1672,10 @@ void OmniHandler::EmitBrowserEvent(const Json& event) {
 }
 
 void OmniHandler::EmitContentEvent(CefRefPtr<CefBrowser> browser, Json event) {
+  if (browser &&
+      recycling_content_browser_ids_.count(browser->GetIdentifier()) > 0) {
+    return;
+  }
   const std::string tab_id = TabIdForContentBrowser(browser);
   if (tab_id.empty()) {
     // Recycled/unbound views (about:blank after a tab close) must not
@@ -1576,6 +1734,14 @@ void OmniHandler::OnTitleChange(CefRefPtr<CefBrowser> browser,
     // Never let the overlay page retitle the window.
     return;
   }
+  if (IsDevToolsBrowser(browser)) {
+    if (auto browser_view = CefBrowserView::GetForBrowser(browser)) {
+      if (auto window = browser_view->GetWindow()) {
+        window->SetTitle(title);
+      }
+    }
+    return;
+  }
 
   std::string display = title.ToString();
   if (paths::IsPrivateMode() &&
@@ -1621,6 +1787,12 @@ void OmniHandler::OnLoadingStateChange(CefRefPtr<CefBrowser> browser,
   if (auto frame = browser->GetMainFrame()) {
     url = frame->GetURL().ToString();
     if (!isLoading) {
+      const int browser_id = browser->GetIdentifier();
+      if (recycling_content_browser_ids_.count(browser_id) > 0) {
+        if (url.empty() || url == "about:blank") {
+          recycling_content_browser_ids_.erase(browser_id);
+        }
+      }
       const std::string tab_id = TabIdForContentBrowser(browser);
       FlushPendingContentUrl(tab_id);
     }
@@ -1671,8 +1843,23 @@ void OmniHandler::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
     message_router_->AddHandler(library_handler_, false);
   }
 
+  if (auto frame = browser->GetMainFrame()) {
+    if (IsDevToolsUrl(frame->GetURL().ToString())) {
+      RegisterDevToolsBrowser(browser);
+    }
+  }
+  // DevTools is a popup and is never bound to a tab view.
+  if (browser->IsPopup() && TabIdForContentBrowser(browser).empty() &&
+      !IsShellBrowser(browser) && !IsOverlayBrowser(browser)) {
+    RegisterDevToolsBrowser(browser);
+  }
+
   if (IsShellBrowser(browser)) {
     StartHotReloadIfNeeded();
+  }
+
+  if (IsDevToolsBrowser(browser)) {
+    return;
   }
 
   if (IsContentBrowser(browser)) {
@@ -1690,6 +1877,9 @@ void OmniHandler::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
 
 bool OmniHandler::DoClose(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
+  if (IsDevToolsBrowser(browser)) {
+    return false;
+  }
   if (IsShellBrowser(browser)) {
     BeginShutdown();
   }
@@ -1698,7 +1888,8 @@ bool OmniHandler::DoClose(CefRefPtr<CefBrowser> browser) {
 
 void OmniHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   CEF_REQUIRE_UI_THREAD();
-  const bool was_shell = IsShellBrowser(browser);
+  const bool was_devtools = IsDevToolsBrowser(browser);
+  const bool was_shell = !was_devtools && IsShellBrowser(browser);
 
   if (was_shell) {
     BeginShutdown();
@@ -1737,6 +1928,9 @@ void OmniHandler::OnLoadError(CefRefPtr<CefBrowser> browser,
             " code=" + std::to_string(errorCode) +
             " text=" + std::string(errorText));
   if (errorCode == ERR_ABORTED) {
+    return;
+  }
+  if (IsDevToolsBrowser(browser)) {
     return;
   }
 
@@ -1783,18 +1977,22 @@ bool OmniHandler::OnBeforePopup(CefRefPtr<CefBrowser> browser,
   (void)browser;
   (void)frame;
   (void)popup_id;
-  (void)target_frame_name;
   (void)target_disposition;
   (void)user_gesture;
   (void)popupFeatures;
-  (void)windowInfo;
   (void)client;
   (void)settings;
   (void)extra_info;
   (void)no_javascript_access;
 
-  // Never spawn popup windows / OS browser — keep everything in the content view.
   const std::string url = target_url.ToString();
+  const std::string name = target_frame_name.ToString();
+  if (IsDevToolsUrl(url) || name.rfind("DevTools", 0) == 0) {
+    windowInfo.runtime_style = CEF_RUNTIME_STYLE_CHROME;
+    return false;
+  }
+
+  // Never spawn popup windows / OS browser — keep everything in the content view.
   if (!url.empty()) {
     OpenInContentBrowser(url);
   }
@@ -1839,6 +2037,12 @@ CefRefPtr<CefResourceRequestHandler> OmniHandler::GetResourceRequestHandler(
   (void)is_download;
   (void)request_initiator;
   disable_default_handling = false;
+  if (request) {
+    const std::string url = request->GetURL().ToString();
+    if (IsDevToolsUrl(url) || url.rfind("chrome:", 0) == 0) {
+      return nullptr;
+    }
+  }
   // Must not call CefBrowserView APIs here (IO thread).
   if (!ShouldFilterNetwork(browser)) {
     return nullptr;
