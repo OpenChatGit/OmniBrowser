@@ -72,13 +72,20 @@ bool PathUnderUiRoot(const std::string& file_url) {
 
 bool IsWebContentAllowedMethod(std::string_view method) {
   return method == "browser.media" || method == "browser.audio" ||
-         method == "browser.adblock.classId";
+         method == "browser.adblock.classId" || method == "agent.callback" ||
+         method == "agent.pause";
 }
 
 bool IsTrustedUiAllowedMethod(std::string_view method) {
   return method.rfind("history.", 0) == 0 ||
          method.rfind("bookmarks.", 0) == 0 ||
          method.rfind("downloads.", 0) == 0 ||
+         method.rfind("session.", 0) == 0 || method.rfind("tabs.", 0) == 0 ||
+         method.rfind("settings.", 0) == 0 ||
+         method.rfind("plugins.", 0) == 0 ||
+         method.rfind("agent.", 0) == 0 ||
+         method.rfind("page.", 0) == 0 ||
+         method == "api.list" ||
          method == "browser.navigate" || method == "app.info";
 }
 

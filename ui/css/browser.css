@@ -286,7 +286,7 @@
 }
 
 .browser-brand-mark {
-  width: 40px;
+  width: 33px;
   height: 40px;
   display: block;
   margin: 0;
@@ -614,3 +614,175 @@
   height: 100%;
   background: transparent;
 }
+
+/* AI Luminous Glow Aura (Around Main View only, below topbar header) */
+.ai-glow-overlay {
+  position: fixed;
+  top: 80px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 999990;
+  border-radius: 0;
+  opacity: 0;
+  transition: opacity 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 
+    inset 0 0 10px 1px rgba(102, 192, 244, 0.4),
+    inset 0 0 24px 2px rgba(26, 159, 255, 0.2),
+    inset 0 0 50px 4px rgba(14, 116, 219, 0.08);
+}
+
+body.ai-active .ai-glow-overlay {
+  opacity: 1;
+  animation: ai-aura-pulse 2.4s infinite ease-in-out;
+}
+
+@keyframes ai-aura-pulse {
+  0%, 100% {
+    box-shadow: 
+      inset 0 0 8px 1px rgba(102, 192, 244, 0.35),
+      inset 0 0 20px 2px rgba(26, 159, 255, 0.16),
+      inset 0 0 40px 3px rgba(14, 116, 219, 0.06);
+  }
+  50% {
+    box-shadow: 
+      inset 0 0 14px 2px rgba(102, 192, 244, 0.55),
+      inset 0 0 32px 3px rgba(26, 159, 255, 0.28),
+      inset 0 0 60px 6px rgba(14, 116, 219, 0.12);
+  }
+}
+
+.ai-control-pill {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(0);
+  z-index: 999999;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.38rem 0.45rem 0.38rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(26, 25, 26, 0.92);
+  box-shadow: 
+    0 16px 36px rgba(0, 0, 0, 0.55),
+    0 0 24px rgba(102, 192, 244, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  font-family: var(--font);
+  color: var(--text);
+  animation: ai-pill-slide-up 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition: opacity 240ms ease, transform 240ms ease, box-shadow 240ms ease;
+  user-select: none;
+}
+
+.ai-control-pill[hidden] {
+  display: none !important;
+}
+
+/* Shell is only the chrome strip while browsing — a bottom-fixed pill
+   would sit on the header. Content pages get their own injected pill. */
+.shell:has(#browser[data-mode="browse"]) .ai-control-pill {
+  display: none !important;
+}
+
+@keyframes ai-pill-slide-up {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(22px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+.ai-control-pill-content {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.ai-control-pill-dot {
+  width: 7.5px;
+  height: 7.5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px var(--accent-strong), 0 0 18px var(--accent);
+  animation: ai-pill-dot-pulse 1.8s infinite ease-in-out;
+  flex-shrink: 0;
+}
+
+@keyframes ai-pill-dot-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+    box-shadow: 0 0 8px var(--accent-strong), 0 0 14px var(--accent);
+  }
+  50% {
+    transform: scale(1.35);
+    opacity: 0.75;
+    box-shadow: 0 0 14px #a3e0ff, 0 0 22px var(--accent);
+  }
+}
+
+.ai-control-pill-text {
+  color: #f0f0f0;
+  font-size: 0.8rem;
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+.ai-control-pill-btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  padding: 0.32rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
+  color: #f5f5f5;
+  font-family: var(--font);
+  font-size: 0.76rem;
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  transition: all 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+
+.ai-control-pill-btn:hover {
+  background: rgba(217, 75, 75, 0.22);
+  border-color: rgba(217, 75, 75, 0.5);
+  color: #ff9d9d;
+  box-shadow: 0 0 14px rgba(217, 75, 75, 0.35);
+}
+
+.ai-control-pill-btn:active {
+  transform: scale(0.96);
+}
+
+.ai-control-pill-btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-control-pill-btn-icon .icon {
+  width: 12px;
+  height: 12px;
+  stroke-width: 2.2px;
+}
+
+/* Native HWND HUD draws glow + pill above every page, including Wikipedia.
+   Shell CSS overlays sit behind the content view and must not paint. */
+.ai-glow-overlay,
+.ai-control-pill {
+  display: none !important;
+}
+

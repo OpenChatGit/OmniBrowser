@@ -6,6 +6,10 @@
 
 namespace omni {
 
+/** Wikipedia / MediaWiki mutate the DOM constantly. MutationObservers and
+ *  full-DOM scans in the content process OOM or CHECK-crash CEF. */
+bool IsFragileDomUrl(const std::string& url);
+
 /** Inject scrollbar CSS and a low-frequency media poll (no event flood). */
 void InjectContentPageScripts(CefRefPtr<CefFrame> frame);
 

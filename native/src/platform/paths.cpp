@@ -83,6 +83,18 @@ std::string DownloadsPath() {
   return EnsureAppDataDir() + "\\downloads.json";
 }
 
+std::string SettingsPath() {
+  return EnsureAppDataDir() + "\\settings.json";
+}
+
+std::string SessionPath() {
+  return EnsureAppDataDir() + "\\tab_session.json";
+}
+
+std::string PluginsDir() {
+  return UiRootDir() + "\\plugins";
+}
+
 std::string PendingOpenTabPath() {
   return EnsureAppDataDir() + "\\pending_open_tab.json";
 }

@@ -226,16 +226,6 @@ bool HandleWindowCommand(
     return true;
   }
 
-  if (method.rfind("window.", 0) != 0 && method.rfind("tab.", 0) != 0 &&
-      method != "app.info") {
-    return false;
-  }
-
-  if (method.rfind("tab.", 0) == 0 || method == "app.info") {
-    callback->Failure(404, "Unknown method: " + method);
-    return true;
-  }
-
   CefRefPtr<CefWindow> window = WindowForBrowser(browser);
   if (!window) {
     callback->Failure(500, "Window unavailable");

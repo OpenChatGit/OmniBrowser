@@ -55,7 +55,7 @@
             <img
               class="topbar-search-mark"
               id="browser-search-mark"
-              src="assets/qubrain.svg"
+              src="assets/QuBrain-new/q-white.svg"
               alt=""
               draggable="false"
             />
@@ -200,7 +200,7 @@
               </div>
             </div>
             <div class="browser-brand-row">
-              <img class="browser-brand-mark" src="assets/qubrain.svg" alt="" width="40" height="40" />
+              <img class="browser-brand-mark" src="assets/QuBrain-new/q-white.svg" alt="" width="33" height="40" />
               <h1 class="browser-brand" id="browser-brand">Omni Browser</h1>
               <script>
                 if (window.OmniPrivate && OmniPrivate.enabled) {
@@ -275,6 +275,18 @@
           </div>
         </div>
       </section>
+    <!-- AI Luminous Frame Border -->
+    <div class="ai-glow-overlay" id="ai-glow-overlay" aria-hidden="true"></div>
+
+    <!-- Floating AI Agent Control Pill (bottom-center) -->
+    <div class="ai-control-pill" id="ai-control-pill" role="status" aria-live="polite" hidden>
+      <div class="ai-control-pill-content">
+        <span class="ai-control-pill-text">Agent Controlled</span>
+      </div>
+      <button type="button" class="ai-control-pill-btn" id="ai-control-pause-btn" aria-label="Take Control">
+        <span class="ai-control-pill-btn-icon" id="ai-control-btn-icon"></span>
+        <span>Take Control</span>
+      </button>
     </div>
   </div>
 

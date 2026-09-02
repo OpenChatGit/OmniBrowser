@@ -57,4 +57,28 @@ bool ApiDispatcher::IsRemoteSafe(std::string_view method) const {
   return false;
 }
 
+nlohmann::json ApiDispatcher::ListCatalog() const {
+  Json catalog = Json::array();
+  for (const auto& entry : exact_) {
+    catalog.push_back(
+        Json{{"method", entry.first},
+             {"exposure",
+              entry.second.exposure == ApiExposure::RemoteSafe ? "remote"
+                                                               : "ui"}});
+  }
+  for (const auto& entry : prefixes_) {
+    catalog.push_back(
+        Json{{"method", entry.first + "*"},
+             {"exposure",
+              entry.second.exposure == ApiExposure::RemoteSafe ? "remote"
+                                                               : "ui"}});
+  }
+  std::sort(catalog.begin(), catalog.end(),
+            [](const Json& a, const Json& b) {
+              return a.value("method", std::string()) <
+                     b.value("method", std::string());
+            });
+  return catalog;
+}
+
 }  // namespace omni

@@ -15,13 +15,15 @@ void RegisterAllApis() {
   }
   g_registered = true;
 
-  // Exact handlers first (adblock), then domain prefixes.
+  // Exact handlers first (adblock, platform), then domain prefixes.
+  RegisterPlatformApis();
   RegisterAdblockApis();
   RegisterBrowserApis();
   RegisterWindowApis();
   RegisterLibraryApis();
   RegisterTerminalApis();
   RegisterGitApis();
+  RegisterAgentApis();
 }
 
 }  // namespace omni

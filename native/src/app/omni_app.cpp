@@ -1,5 +1,6 @@
 #include "omni/omni_app.h"
 
+#include <cstdlib>
 #include <string>
 
 #include "include/cef_browser.h"
@@ -9,6 +10,7 @@
 #include "include/wrapper/cef_helpers.h"
 #include "omni/adblock_service.h"
 #include "omni/dev_mode.h"
+#include "omni/mcp/mcp_server.h"
 #include "omni/omni_handler.h"
 #include "omni/paths.h"
 #include "omni/window_delegate.h"
@@ -19,12 +21,15 @@ void OmniApp::OnBeforeCommandLineProcessing(
     const CefString& process_type,
     CefRefPtr<CefCommandLine> command_line) {
   (void)process_type;
+  // Do not force GPU rasterization / zero-copy. AMD (and Wikipedia's image
+  // dense first paint) CHECKs the browser process with those flags.
+  command_line->AppendSwitch("enable-quic");
+  command_line->AppendSwitch("enable-smooth-scrolling");
+
   // Keep media playing in hidden (background) tab browser views.
   command_line->AppendSwitch("disable-backgrounding-occluded-windows");
   command_line->AppendSwitch("disable-renderer-backgrounding");
   if (IsDevMode()) {
-    // Avoid stale CSS/JS while editing from the source tree.
-    command_line->AppendSwitch("disable-http-cache");
     command_line->AppendSwitchWithValue("disable-features", "IsolateOrigins");
   }
 }
@@ -72,8 +77,28 @@ void OmniApp::OnContextInitialized() {
   handler->SetContentBrowserView(content_view);
   handler->SetOverlayBrowserView(overlay_view);
 
+  // Do not create a fourth CEF browser for the AI HUD. The overlay HWND is
+  // opaque (clips rounding) and the pill is injected into the content page.
   CefWindow::CreateTopLevelWindow(new OmniWindowDelegate(
       shell_view, content_view, overlay_view, runtime_style));
+
+  // MCP after the window exists so tools don't hit a half-built handler.
+  // Stdio agents that race CefInitialize still attach via HTTP once this is up.
+  CefRefPtr<CefCommandLine> cmd = CefCommandLine::GetGlobalCommandLine();
+  int mcp_port = 8999;
+  if (cmd && cmd->HasSwitch("mcp-port")) {
+    const std::string port_str = cmd->GetSwitchValue("mcp-port").ToString();
+    if (!port_str.empty()) {
+      mcp_port = std::atoi(port_str.c_str());
+      if (mcp_port <= 0) mcp_port = 8999;
+    }
+  }
+  if (!cmd || !cmd->HasSwitch("no-mcp")) {
+    McpServer::Get().StartHttpServer(mcp_port);
+  }
+  if (cmd && (cmd->HasSwitch("mcp") || cmd->HasSwitch("mcp-stdio"))) {
+    McpServer::Get().StartStdioServer();
+  }
 }
 
 CefRefPtr<CefClient> OmniApp::GetDefaultClient() {
@@ -108,19 +133,26 @@ void OmniApp::OnWebKitInitialized() {
 void OmniApp::OnContextCreated(CefRefPtr<CefBrowser> browser,
                                CefRefPtr<CefFrame> frame,
                                CefRefPtr<CefV8Context> context) {
-  renderer_router_->OnContextCreated(browser, frame, context);
+  if (renderer_router_) {
+    renderer_router_->OnContextCreated(browser, frame, context);
+  }
 }
 
 void OmniApp::OnContextReleased(CefRefPtr<CefBrowser> browser,
                                 CefRefPtr<CefFrame> frame,
                                 CefRefPtr<CefV8Context> context) {
-  renderer_router_->OnContextReleased(browser, frame, context);
+  if (renderer_router_) {
+    renderer_router_->OnContextReleased(browser, frame, context);
+  }
 }
 
 bool OmniApp::OnProcessMessageReceived(CefRefPtr<CefBrowser> browser,
                                        CefRefPtr<CefFrame> frame,
                                        CefProcessId source_process,
                                        CefRefPtr<CefProcessMessage> message) {
+  if (!renderer_router_) {
+    return false;
+  }
   return renderer_router_->OnProcessMessageReceived(browser, frame,
                                                     source_process, message);
 }

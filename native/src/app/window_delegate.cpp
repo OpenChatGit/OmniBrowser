@@ -5,10 +5,39 @@
 #include "include/views/cef_overlay_controller.h"
 #include "omni/omni_handler.h"
 
+#if defined(_WIN32)
+#include <windows.h>
+#endif
+
 namespace omni {
 namespace {
 
 constexpr int kMinChromeHeight = 80;
+#if defined(_WIN32)
+constexpr int kAppIconId = 101;  // native/win/resource.h IDI_APPICON
+
+void ApplyAppIcon(CefRefPtr<CefWindow> window) {
+  if (!window) {
+    return;
+  }
+  HWND hwnd = window->GetWindowHandle();
+  if (!hwnd) {
+    return;
+  }
+  HINSTANCE inst = GetModuleHandleW(nullptr);
+  auto load = [inst](int metric) -> HICON {
+    return static_cast<HICON>(LoadImageW(
+        inst, MAKEINTRESOURCEW(kAppIconId), IMAGE_ICON,
+        GetSystemMetrics(metric), GetSystemMetrics(metric), LR_DEFAULTCOLOR));
+  };
+  if (HICON big = load(SM_CXICON)) {
+    SendMessageW(hwnd, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(big));
+  }
+  if (HICON small = load(SM_CXSMICON)) {
+    SendMessageW(hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(small));
+  }
+}
+#endif
 
 int CurrentChromeHeight() {
   auto* handler = OmniHandler::GetInstance();
@@ -71,6 +100,9 @@ void OmniWindowDelegate::OnWindowCreated(CefRefPtr<CefWindow> window) {
     }
   }
 
+#if defined(_WIN32)
+  ApplyAppIcon(window);
+#endif
   window->Show();
 
   if (auto* handler = OmniHandler::GetInstance()) {
@@ -83,6 +115,7 @@ void OmniWindowDelegate::OnWindowDestroyed(CefRefPtr<CefWindow> window) {
   if (auto* handler = OmniHandler::GetInstance()) {
     handler->SetOverlayController(nullptr);
     handler->CancelAppMenu();
+    handler->DestroyAiHud();
   }
   shell_view_ = nullptr;
   content_view_ = nullptr;
@@ -100,6 +133,7 @@ void OmniWindowDelegate::OnWindowBoundsChanged(CefRefPtr<CefWindow> window,
     // YouTube Shorts treat the viewport jump as a scroll and change videos.
     handler->OverlayHide();
     handler->CancelAppMenu();
+    handler->LayoutAiHud();
   }
 }
 

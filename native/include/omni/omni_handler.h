@@ -2,6 +2,7 @@
 
 #include <list>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_set>
@@ -28,6 +29,8 @@
 #include "omni/window_delegate.h"
 
 namespace omni {
+
+class AiHudOverlay;
 
 class OmniHandler : public CefClient,
                     public CefDisplayHandler,
@@ -76,6 +79,11 @@ class OmniHandler : public CefClient,
   void CloseContentTab(const std::string& tab_id);
   std::string ActiveContentTabId() const { return active_tab_id_; }
   std::string TabIdForContentBrowser(CefRefPtr<CefBrowser> browser) const;
+  size_t ContentTabCount() const { return tab_content_views_.size(); }
+  bool HasPendingContentUrl(const std::string& tab_id) const {
+    return pending_content_urls_.count(tab_id) > 0;
+  }
+  bool is_shutting_down() const { return shutting_down_; }
 
   bool ContentNavigate(const std::string& url);
   bool ContentNavigate(const std::string& url, const std::string& tab_id);
@@ -92,6 +100,7 @@ class OmniHandler : public CefClient,
   bool content_visible() const { return content_visible_; }
   void LayoutContentBrowser();
   Json ContentStateJson() const;
+  Json GetTabsListJson() const;
   void SetContentAudioPlaying(CefRefPtr<CefBrowser> browser, bool playing);
   void SetContentAudioMuted(bool muted);
   void SetContentAudioMuted(const std::string& tab_id, bool muted);
@@ -122,10 +131,18 @@ class OmniHandler : public CefClient,
   void ShowDevToolsNow();
   void RegisterDevToolsBrowser(CefRefPtr<CefBrowser> browser);
   bool IsDevToolsBrowser(CefRefPtr<CefBrowser> browser) const;
-  void ShowHistoryFlyout(const nlohmann::json& recent_tabs);
+  void ShowHistoryFlyout(const Json& recent_tabs);
   void HideHistoryFlyout();
   void HandleOverlayCommand(const Json& command);
   void EmitDownloadProgress();
+
+  void SetAiActive(bool active, int agent_count = 1);
+  bool is_ai_active() const { return ai_active_; }
+  void LayoutAiHud();
+  void DestroyAiHud();
+  // css_x/css_y are content-viewport CSS pixels (getBoundingClientRect).
+  void MoveAgentPointer(float css_x, float css_y, bool click);
+  void SendAgentMouseClick(int css_x, int css_y);
 
   // Close content/overlay first, then allow the shell window to die. Call from
   // window chrome close paths so CEF child processes do not linger.
@@ -141,6 +158,7 @@ class OmniHandler : public CefClient,
                    const Json& payload);
   void OverlayResize(int width, int height);
   void OverlayHide();
+  CefRefPtr<CefBrowserView> ContentViewForTab(const std::string& tab_id) const;
   void SubscribeOverlayEvents(
       int64_t query_id,
       CefRefPtr<CefMessageRouterBrowserSide::Callback> callback);
@@ -180,6 +198,11 @@ class OmniHandler : public CefClient,
   void OnAddressChange(CefRefPtr<CefBrowser> browser,
                        CefRefPtr<CefFrame> frame,
                        const CefString& url) override;
+  bool OnConsoleMessage(CefRefPtr<CefBrowser> browser,
+                        cef_log_severity_t level,
+                        const CefString& message,
+                        const CefString& source,
+                        int line) override;
 
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override;
   bool DoClose(CefRefPtr<CefBrowser> browser) override;
@@ -264,12 +287,14 @@ class OmniHandler : public CefClient,
   void FinishShutdown();
   CefRefPtr<CefBrowser> ContentBrowser() const;
   CefRefPtr<CefBrowserView> ActiveContentView() const;
-  CefRefPtr<CefBrowserView> ContentViewForTab(const std::string& tab_id) const;
   bool ShouldOpenInContent(const std::string& url) const;
   bool OpenInContentBrowser(const std::string& url);
   int ContentMemoryMb() const;
   void EmitContentEvent(CefRefPtr<CefBrowser> browser, Json event);
   void FlushPendingContentUrl(const std::string& tab_id);
+  bool IsContentSeedIdle(CefRefPtr<CefBrowser> browser) const;
+  void MarkContentSeedIdle(CefRefPtr<CefBrowser> browser);
+  void ClearContentSeedIdle(CefRefPtr<CefBrowser> browser);
   void TrackBrowserIdentity(CefRefPtr<CefBrowser> browser);
   void UntrackBrowserIdentity(CefRefPtr<CefBrowser> browser);
 
@@ -281,9 +306,8 @@ class OmniHandler : public CefClient,
   bool quit_posted_ = false;
 
   CefRefPtr<CefBrowserView> shell_browser_view_;
-  // Seed content view created at startup; claimed by the first EnsureContentTab.
-  // Also used to recycle closed tab browsers (avoids CloseBrowser/Create races).
-  CefRefPtr<CefBrowserView> unbound_content_view_;
+  // Pool of recycled content browser views to prevent CEF destruction/creation crashes
+  std::vector<CefRefPtr<CefBrowserView>> recycled_content_views_;
   CefRefPtr<CefBrowserView> overlay_browser_view_;
   CefRefPtr<CefOverlayController> overlay_controller_;
   std::map<std::string, CefRefPtr<CefBrowserView>> tab_content_views_;
@@ -292,8 +316,12 @@ class OmniHandler : public CefClient,
   std::map<std::string, std::string> pending_content_urls_;
   // Drop stale events while a recycled view navigates to about:blank.
   std::unordered_set<int> recycling_content_browser_ids_;
+  // First about:blank (or recycle wipe) must finish before LoadURL of a real
+  // page. CEF Alloy CHECKs if we navigate while the seed document is attaching.
+  std::unordered_set<int> content_seed_idle_ids_;
   std::map<std::string, bool> tab_audio_playing_;
   std::map<std::string, Json> tab_media_;
+  std::map<std::string, std::string> tab_titles_;
   CefRefPtr<CefMenuButton> app_menu_button_;
   CefRefPtr<CefOverlayController> app_menu_button_controller_;
   CefRefPtr<AppMenuButtonHost> app_menu_button_host_;
@@ -302,13 +330,15 @@ class OmniHandler : public CefClient,
   bool overlay_visible_ = false;
   bool app_menu_open_ = false;
   bool history_flyout_visible_ = false;
+  bool ai_active_ = false;
+  int ai_agent_count_ = 0;
+  std::unique_ptr<AiHudOverlay> ai_hud_;
   int overlay_anchor_right_ = 0;
   int overlay_anchor_top_ = 0;
   int overlay_width_ = 244;
   int overlay_height_ = 0;
   int app_menu_btn_right_ = 0;
   int app_menu_btn_bottom_ = 0;
-  int app_menu_width_est_ = 248;
   CefRefPtr<AppMenuDelegate> app_menu_;
 
   std::map<int64_t, CefRefPtr<CefMessageRouterBrowserSide::Callback>>

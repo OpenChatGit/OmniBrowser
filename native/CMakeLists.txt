@@ -54,6 +54,7 @@ set(OMNI_SRCS
   src/main_win.cpp
   src/app/omni_app.cpp
   src/app/omni_handler.cpp
+  src/app/ai_hud.cpp
   src/app/app_menu.cpp
   src/app/scrollbar_inject.cpp
   src/app/window_delegate.cpp
@@ -62,12 +63,14 @@ set(OMNI_SRCS
   src/api/api_dispatcher.cpp
   src/api/api_access.cpp
   src/api/register_apis.cpp
+  src/api/handlers/platform_api.cpp
   src/api/handlers/adblock_api.cpp
   src/api/handlers/browser_api.cpp
   src/api/handlers/window_api.cpp
   src/api/handlers/library_api.cpp
   src/api/handlers/terminal_api.cpp
   src/api/handlers/git_api.cpp
+  src/api/handlers/agent_api.cpp
   src/ipc/library_ipc.cpp
   src/ipc/library_commands.cpp
   src/ipc/library_json.cpp
@@ -81,16 +84,25 @@ set(OMNI_SRCS
   src/library/history_store.cpp
   src/library/bookmark_store.cpp
   src/library/download_store.cpp
+  src/library/settings_store.cpp
+  src/library/session_store.cpp
+  src/library/plugin_registry.cpp
   src/launch/game_launcher.cpp
   src/platform/paths.cpp
   src/platform/file_dialog.cpp
   src/platform/utf8.cpp
   src/dev/dev_mode.cpp
   src/dev/ui_hot_reload.cpp
+  src/mcp/mcp_server.cpp
+  src/mcp/mcp_http_server.cpp
 )
 
 ADD_LOGICAL_TARGET("libcef_lib" "${CEF_LIB_DEBUG}" "${CEF_LIB_RELEASE}")
 SET_CEF_TARGET_OUT_DIR()
+
+if(WIN32)
+  list(APPEND OMNI_SRCS win/app.rc)
+endif()
 
 add_executable(${OMNI_TARGET} WIN32 ${OMNI_SRCS})
 SET_EXECUTABLE_TARGET_PROPERTIES(${OMNI_TARGET})
@@ -121,6 +133,8 @@ target_link_libraries(${OMNI_TARGET}
   userenv
   ntdll
   bcrypt
+  iphlpapi
+  gdiplus
 )
 
 ADD_WINDOWS_MANIFEST("${CMAKE_CURRENT_SOURCE_DIR}/win" "${OMNI_TARGET}" "exe")

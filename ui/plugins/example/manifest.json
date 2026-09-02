@@ -1,0 +1,8 @@
+{
+  "id": "example",
+  "name": "Example Plugin",
+  "version": "0.0.1",
+  "description": "Sample manifest for Omni Browser plugins.",
+  "entry": "index.html",
+  "permissions": ["tabs", "settings"]
+}

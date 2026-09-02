@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -21,6 +22,8 @@ enum class ApiExposure : uint8_t {
   RemoteSafe = 1,
 };
 
+class ApiResponder;
+
 struct ApiContext {
   OmniHandler* owner = nullptr;
   CefRefPtr<CefBrowser> browser;
@@ -30,6 +33,8 @@ struct ApiContext {
   bool persistent = false;
   /** Set by CEF transport so legacy Handle*Command helpers can respond. */
   CefRefPtr<CefMessageRouterBrowserSide::Callback> cef_callback;
+  /** Heap responder for async MCP tools (page.eval). Must outlive the JS reply. */
+  std::shared_ptr<ApiResponder> shared_responder;
 };
 
 class ApiResponder {
@@ -89,6 +94,9 @@ class ApiDispatcher {
                 ApiResponder& responder) const;
 
   bool IsRemoteSafe(std::string_view method) const;
+
+  /** Catalog of exact methods and prefix wildcards for api.list. */
+  nlohmann::json ListCatalog() const;
 
  private:
   ApiDispatcher() = default;

@@ -86,8 +86,35 @@
     } catch (_) {
       /* ignore quota / private mode */
     }
+    if (
+      window.OmniBridge &&
+      typeof OmniBridge.settingsSet === "function"
+    ) {
+      OmniBridge.settingsSet({ key: STORAGE_KEY, value: activeId }).catch(
+        () => {}
+      );
+    }
     return engine;
   }
+
+  function pullSearchEngineFromSettings() {
+    if (
+      !window.OmniBridge ||
+      typeof OmniBridge.settingsGet !== "function"
+    ) {
+      return;
+    }
+    OmniBridge.settingsGet({ key: STORAGE_KEY })
+      .then((result) => {
+        const value = result && result.value;
+        if (typeof value === "string" && ENGINES.some((e) => e.id === value)) {
+          activeId = value;
+        }
+      })
+      .catch(() => {});
+  }
+
+  pullSearchEngineFromSettings();
 
   function listSearchEngines() {
     // Selected engine always first in the menu.

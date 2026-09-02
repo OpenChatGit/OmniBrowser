@@ -20,7 +20,7 @@
     setSearchEngine,
   } = window.OmniBrowserUrl;
 
-  const NEW_TAB_FAVICON = "assets/qubrain.svg";
+  const NEW_TAB_FAVICON = "assets/QuBrain-new/q-white.svg";
   const SESSION_KEY = "omni.browser.session";
   const SESSION_VERSION = 1;
   const HISTORY_KEY = "omni.browser.history";
@@ -127,8 +127,36 @@
     /** @type {Map<string, number>} */
     const tabMemoryMb = new Map();
     /** @type {number|null} */
+    const aiPill = document.getElementById("ai-control-pill");
+    const aiPauseBtn = document.getElementById("ai-control-pause-btn");
+    let aiPaused = false;
+
+    const aiBtnIcon = document.getElementById("ai-control-btn-icon");
+    if (aiBtnIcon && window.OmniIcons) {
+      OmniIcons.mount(aiBtnIcon, "hand");
+    }
+
+    if (aiPauseBtn) {
+      aiPauseBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        aiPaused = true;
+        if (aiActiveTimer) {
+          window.clearTimeout(aiActiveTimer);
+          aiActiveTimer = 0;
+        }
+        document.body.classList.remove("ai-active");
+        if (root) root.classList.remove("ai-active");
+        if (aiPill) aiPill.hidden = true;
+        if (window.OmniBridge && typeof OmniBridge.agentPause === "function") {
+          OmniBridge.agentPause().catch(() => {});
+        }
+      });
+    }
+
     let lastContentMemoryMb = null;
     let downloadHideTimer = 0;
+    let aiActiveTimer = 0;
     const DOWNLOAD_RING = 2 * Math.PI * 14.5;
     const TAB_TIP_WIDTH = 280;
     const TAB_TIP_DELAY_MS = 420;
@@ -588,63 +616,143 @@
       }, 120);
     }
 
+    function buildSessionPayload() {
+      return {
+        v: SESSION_VERSION,
+        seq,
+        activeId,
+        tabs: tabs.map((tab) => {
+          const history = Array.isArray(tab.history)
+            ? tab.history.filter((entry) => typeof entry === "string")
+            : [];
+          const currentUrl =
+            Number.isInteger(tab.index) && tab.index >= 0
+              ? history[tab.index] || ""
+              : "";
+          let trimmed =
+            history.length > MAX_TAB_HISTORY
+              ? history.slice(history.length - MAX_TAB_HISTORY)
+              : history.slice();
+          let index = Number.isInteger(tab.index) ? tab.index : -1;
+          if (trimmed.length === 0) {
+            index = -1;
+          } else if (
+            currentUrl &&
+            history.length > trimmed.length &&
+            !trimmed.includes(currentUrl)
+          ) {
+            trimmed.push(currentUrl);
+            if (trimmed.length > MAX_TAB_HISTORY) {
+              trimmed = trimmed.slice(trimmed.length - MAX_TAB_HISTORY);
+            }
+            index = trimmed.length - 1;
+          } else if (history.length > trimmed.length) {
+            index = Math.min(
+              trimmed.length - 1,
+              Math.max(0, index - (history.length - trimmed.length))
+            );
+          } else {
+            index = Math.min(trimmed.length - 1, Math.max(-1, index));
+          }
+          if (currentUrl) {
+            const at = trimmed.indexOf(currentUrl);
+            if (at >= 0) {
+              index = at;
+            }
+          }
+          return {
+            id: String(tab.id),
+            title: String(tab.title || "New Tab"),
+            history: trimmed,
+            index,
+          };
+        }),
+        closedTabs: closedTabs.slice(0, MAX_CLOSED_TABS),
+      };
+    }
+
+    function applySessionData(data) {
+      if (
+        !data ||
+        data.v !== SESSION_VERSION ||
+        !Array.isArray(data.tabs) ||
+        data.tabs.length === 0
+      ) {
+        return false;
+      }
+      const restored = data.tabs
+        .map((tab) => {
+          if (!tab || typeof tab.id !== "string") {
+            return null;
+          }
+          const history = Array.isArray(tab.history)
+            ? tab.history.filter(
+                (entry) => typeof entry === "string" && entry.length > 0
+              )
+            : [];
+          let index = Number.isInteger(tab.index) ? tab.index : -1;
+          if (history.length === 0) {
+            index = -1;
+          } else {
+            index = Math.min(history.length - 1, Math.max(0, index));
+          }
+          return {
+            id: tab.id,
+            title: normalizeTabTitle(
+              tab.title || "New Tab",
+              index >= 0 ? history[index] : ""
+            ),
+            history,
+            index,
+            contentLive: false,
+          };
+        })
+        .filter(Boolean);
+      if (!restored.length) {
+        return false;
+      }
+      tabs = restored;
+      if (Array.isArray(data.closedTabs)) {
+        closedTabs = data.closedTabs
+          .filter((entry) => entry && Array.isArray(entry.history))
+          .slice(0, MAX_CLOSED_TABS);
+        saveClosedTabs();
+      }
+      seq = Math.max(
+        Number(data.seq) || 0,
+        ...restored.map((tab) => {
+          const match = /^tab-(\d+)$/.exec(tab.id);
+          return match ? Number(match[1]) : 0;
+        })
+      );
+      activeId =
+        typeof data.activeId === "string" &&
+        restored.some((tab) => tab.id === data.activeId)
+          ? data.activeId
+          : restored[0].id;
+      return true;
+    }
+
+    function syncSessionToNative(payload) {
+      if (
+        isPrivate ||
+        !hasNative ||
+        !window.OmniBridge ||
+        typeof OmniBridge.sessionSet !== "function"
+      ) {
+        return;
+      }
+      OmniBridge.sessionSet({ session: payload }).catch(() => {});
+    }
+
     function saveSession() {
       if (isPrivate) {
         return;
       }
       try {
-        const payload = {
-          v: SESSION_VERSION,
-          seq,
-          activeId,
-          tabs: tabs.map((tab) => {
-            const history = Array.isArray(tab.history)
-              ? tab.history.filter((entry) => typeof entry === "string")
-              : [];
-            const currentUrl =
-              Number.isInteger(tab.index) && tab.index >= 0
-                ? history[tab.index] || ""
-                : "";
-            let trimmed =
-              history.length > MAX_TAB_HISTORY
-                ? history.slice(history.length - MAX_TAB_HISTORY)
-                : history.slice();
-            let index = Number.isInteger(tab.index) ? tab.index : -1;
-            if (trimmed.length === 0) {
-              index = -1;
-            } else if (
-              currentUrl &&
-              history.length > trimmed.length &&
-              !trimmed.includes(currentUrl)
-            ) {
-              trimmed.push(currentUrl);
-              if (trimmed.length > MAX_TAB_HISTORY) {
-                trimmed = trimmed.slice(trimmed.length - MAX_TAB_HISTORY);
-              }
-              index = trimmed.length - 1;
-            } else if (history.length > trimmed.length) {
-              index = Math.min(
-                trimmed.length - 1,
-                Math.max(0, index - (history.length - trimmed.length))
-              );
-            } else {
-              index = Math.min(trimmed.length - 1, Math.max(-1, index));
-            }
-            if (currentUrl) {
-              const at = trimmed.indexOf(currentUrl);
-              if (at >= 0) {
-                index = at;
-              }
-            }
-            return {
-              id: String(tab.id),
-              title: String(tab.title || "New Tab"),
-              history: trimmed,
-              index,
-            };
-          }),
-        };
+        const payload = buildSessionPayload();
         localStorage.setItem(SESSION_KEY, JSON.stringify(payload));
+        syncSessionToNative(payload);
       } catch (_) {
         /* quota / private mode */
       }
@@ -660,62 +768,29 @@
           return false;
         }
         const data = JSON.parse(raw);
-        if (
-          !data ||
-          data.v !== SESSION_VERSION ||
-          !Array.isArray(data.tabs) ||
-          data.tabs.length === 0
-        ) {
-          return false;
-        }
-        const restored = data.tabs
-          .map((tab) => {
-            if (!tab || typeof tab.id !== "string") {
-              return null;
-            }
-            const history = Array.isArray(tab.history)
-              ? tab.history.filter(
-                  (entry) => typeof entry === "string" && entry.length > 0
-                )
-              : [];
-            let index = Number.isInteger(tab.index) ? tab.index : -1;
-            if (history.length === 0) {
-              index = -1;
-            } else {
-              index = Math.min(history.length - 1, Math.max(0, index));
-            }
-            return {
-              id: tab.id,
-              title: normalizeTabTitle(
-                tab.title || "New Tab",
-                index >= 0 ? history[index] : ""
-              ),
-              history,
-              index,
-              contentLive: false,
-            };
-          })
-          .filter(Boolean);
-        if (!restored.length) {
-          return false;
-        }
-        tabs = restored;
-        seq = Math.max(
-          Number(data.seq) || 0,
-          ...restored.map((tab) => {
-            const match = /^tab-(\d+)$/.exec(tab.id);
-            return match ? Number(match[1]) : 0;
-          })
-        );
-        activeId =
-          typeof data.activeId === "string" &&
-          restored.some((tab) => tab.id === data.activeId)
-            ? data.activeId
-            : restored[0].id;
-        return true;
+        return applySessionData(data);
       } catch (_) {
         return false;
       }
+    }
+
+    function restoreSessionFromNative() {
+      if (
+        isPrivate ||
+        !hasNative ||
+        !window.OmniBridge ||
+        typeof OmniBridge.sessionGet !== "function"
+      ) {
+        return Promise.resolve(false);
+      }
+      return OmniBridge.sessionGet()
+        .then((result) => {
+          if (!result || !result.session) {
+            return false;
+          }
+          return applySessionData(result.session);
+        })
+        .catch(() => false);
     }
 
     function createTab() {
@@ -1141,11 +1216,11 @@
 
       tabsEl.replaceChildren();
       tabs.forEach((tab) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
+        const btn = document.createElement("div");
         btn.className =
           "titlebar-tab" + (tab.id === activeId ? " is-active" : "");
         btn.setAttribute("role", "tab");
+        btn.setAttribute("tabindex", "0");
         btn.setAttribute(
           "aria-selected",
           tab.id === activeId ? "true" : "false"
@@ -1172,7 +1247,34 @@
         close.setAttribute("aria-label", "Close tab");
         close.dataset.closeId = tab.id;
 
+        // Explicit direct listeners on close button
+        close.addEventListener("pointerdown", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+        close.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+        close.addEventListener("mouseup", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        });
+        close.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          hideTabHoverTip();
+          closeTab(tab.id);
+        });
+
         btn.append(favicon, label, close);
+
+        btn.addEventListener("click", (e) => {
+          if (!e.target.closest(".titlebar-tab-close, [data-close-id], .titlebar-tab-audio, [data-audio-mute]")) {
+            hideTabHoverTip();
+            activateTab(tab.id);
+          }
+        });
 
         if (tabAudioPlaying.get(tab.id) && !isBlankUrl(url)) {
           const muted = Boolean(tabAudioMuted.get(tab.id));
@@ -1185,6 +1287,14 @@
             "aria-label",
             muted ? "Unmute tab" : "Mute tab"
           );
+          audio.addEventListener("pointerdown", (e) => {
+            e.stopPropagation();
+          });
+          audio.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleTabAudioMute(tab.id);
+          });
           btn.insertBefore(audio, label);
           OmniIcons.mount(audio, "volume-2");
         }
@@ -1884,7 +1994,13 @@
       if (!hasNative || typeof OmniBridge.browserEnsureTab !== "function") {
         return;
       }
+      // Start-page tabs have no content URL. Creating a CEF view for them at
+      // boot, then closing the extra New Tab, recycles a still-booting Alloy
+      // browser and crashes when Wikipedia (or any restored page) navigates.
       for (const tab of tabs) {
+        if (isStartTab(tab)) {
+          continue;
+        }
         OmniBridge.browserEnsureTab(tab.id).catch(() => {});
       }
     }
@@ -1935,6 +2051,9 @@
       }
       syncNavButtons();
       syncSearchBarIcon();
+      if (aiPill) {
+        aiPill.hidden = true;
+      }
       renderTabs();
       scheduleSaveSession();
     }
@@ -2134,8 +2253,11 @@
     }
 
     function closeTab(id) {
+      console.log("[OmniBrowser] closeTab requested for id:", id);
       const index = tabs.findIndex((tab) => tab.id === id);
       if (index < 0) {
+        console.warn("[OmniBrowser] closeTab: id not found in tabs list:", id, tabs);
+        renderTabs();
         return;
       }
       const closing = tabs[index];
@@ -2156,7 +2278,9 @@
         rememberVisit(closeUrl, closing.title);
       }
       if (hasNative && typeof OmniBridge.browserCloseTab === "function") {
-        OmniBridge.browserCloseTab(id).catch(() => {});
+        OmniBridge.browserCloseTab(id).catch((err) => {
+          console.error("[OmniBrowser] browserCloseTab IPC error:", err);
+        });
       }
       tabAudioPlaying.delete(id);
       tabAudioMuted.delete(id);
@@ -2171,8 +2295,10 @@
       if (activeId === id) {
         const next = tabs[index] || tabs[index - 1];
         activeId = next.id;
+        applyActiveTab();
+      } else {
+        renderTabs();
       }
-      applyActiveTab();
       scheduleSaveSession();
     }
 
@@ -2265,10 +2391,97 @@
         onDownloadEvent(msg);
         return;
       }
+      if (msg.type === "ai.active" || msg.type === "ai.status") {
+        const isActive = Boolean(msg.active);
+        if (isActive) {
+          aiPaused = false;
+          document.body.classList.add("ai-active");
+          if (root) root.classList.add("ai-active");
+          if (aiPill) {
+            const text = aiPill.querySelector(".ai-control-pill-text");
+            const count = Number(msg.agentCount) || 0;
+            if (text) {
+              text.textContent = count > 1 ? count + " Agents" : "Agent Controlled";
+            }
+            aiPill.hidden = true;
+          }
+          if (aiActiveTimer) {
+            window.clearTimeout(aiActiveTimer);
+            aiActiveTimer = 0;
+          }
+        } else {
+          if (aiActiveTimer) {
+            window.clearTimeout(aiActiveTimer);
+            aiActiveTimer = 0;
+          }
+          document.body.classList.remove("ai-active");
+          if (root) root.classList.remove("ai-active");
+          if (aiPill) aiPill.hidden = true;
+        }
+        return;
+      }
+
+      if (msg.type === "tab.created") {
+        const tabId = msg.tabId;
+        if (tabId) {
+          let existing = tabs.find((t) => t.id === tabId);
+          if (!existing) {
+            const url = msg.url || "";
+            const isBlank = !url || url === "about:blank";
+            existing = {
+              id: tabId,
+              title: msg.title || (url && !isBlank ? titleFromUrl(url) : "New Tab"),
+              history: url && !isBlank ? [url] : [],
+              index: url && !isBlank ? 0 : -1,
+              contentLive: true,
+            };
+            tabs.push(existing);
+          }
+          if (msg.activate) {
+            activeId = tabId;
+            applyActiveTab();
+          }
+          renderTabs();
+          scheduleSaveSession();
+        }
+        return;
+      }
+
+      if (msg.type === "tab.activated") {
+        const tabId = msg.tabId;
+        if (tabId && tabs.some((t) => t.id === tabId)) {
+          activeId = tabId;
+          applyActiveTab();
+          renderTabs();
+          syncSearchFields(currentUrl());
+          syncBookmarkButton();
+        }
+        return;
+      }
+
+      if (msg.type === "tab.closed") {
+        const tabId = msg.tabId;
+        const at = tabs.findIndex((t) => t.id === tabId);
+        if (at >= 0) {
+          tabs.splice(at, 1);
+          if (!tabs.length) {
+            const newT = createTab();
+            tabs.push(newT);
+            activeId = newT.id;
+            applyActiveTab();
+          } else if (activeId === tabId) {
+            activeId = tabs[Math.min(at, tabs.length - 1)].id;
+            applyActiveTab();
+          } else {
+            renderTabs();
+          }
+          scheduleSaveSession();
+        }
+        return;
+      }
+
       const eventTabId =
         typeof msg.tabId === "string" && msg.tabId ? msg.tabId : "";
-      // Never apply a closed/unknown tab's events to the active tab
-      // (about:blank after close was wiping the remaining tab's title).
       const tab = eventTabId
         ? tabs.find((entry) => entry.id === eventTabId)
         : activeTab();
@@ -2535,7 +2748,11 @@
         if (event.button !== 0) {
           return;
         }
-        if (event.target.closest("[data-close-id], [data-audio-mute]")) {
+        if (
+          event.target.closest(
+            "[data-close-id], .titlebar-tab-close, [data-audio-mute], .titlebar-tab-audio"
+          )
+        ) {
           return;
         }
         const tabBtn = event.target.closest(".titlebar-tab");
@@ -2645,12 +2862,20 @@
           toggleTabAudioMute(tabBtn && tabBtn.dataset.tabId);
           return;
         }
-        const closeBtn = event.target.closest("[data-close-id]");
+        const closeBtn = event.target.closest("[data-close-id], .titlebar-tab-close");
         if (closeBtn) {
           event.preventDefault();
           event.stopPropagation();
           hideTabHoverTip();
-          closeTab(closeBtn.getAttribute("data-close-id"));
+          const tabId =
+            closeBtn.getAttribute("data-close-id") ||
+            closeBtn.dataset.closeId ||
+            (closeBtn.closest(".titlebar-tab")
+              ? closeBtn.closest(".titlebar-tab").dataset.tabId
+              : "");
+          if (tabId) {
+            closeTab(tabId);
+          }
           return;
         }
         if (suppressTabActivate) {
@@ -2662,6 +2887,18 @@
         if (tabBtn && tabBtn.dataset.tabId) {
           hideTabHoverTip();
           activateTab(tabBtn.dataset.tabId);
+        }
+      });
+
+      tabsEl.addEventListener("auxclick", (event) => {
+        if (event.button === 1) {
+          event.preventDefault();
+          event.stopPropagation();
+          hideTabHoverTip();
+          const tabBtn = event.target.closest(".titlebar-tab");
+          if (tabBtn && tabBtn.dataset.tabId) {
+            closeTab(tabBtn.dataset.tabId);
+          }
         }
       });
 
@@ -2709,20 +2946,35 @@
         }
         adoptTransferredTab(pending.tab, { activate: true });
         ensureNativeTabs();
+        syncSessionToNative(buildSessionPayload());
         return;
       }
-      if (restoreSession()) {
-        ensureNativeTabs();
-        const restoredActiveId = activeId;
-        // Let the seed content browser finish OnAfterCreated before LoadURL.
-        window.setTimeout(() => {
-          if (activeId === restoredActiveId) {
-            applyActiveTab();
-          }
-        }, 150);
-      } else {
+      const restoredLocal = restoreSession();
+      const finishBoot = () => {
+        if (tabs.length > 0) {
+          ensureNativeTabs();
+          syncSessionToNative(buildSessionPayload());
+          const restoredActiveId = activeId;
+          window.setTimeout(() => {
+            if (activeId === restoredActiveId) {
+              applyActiveTab();
+            }
+          }, 150);
+          return;
+        }
         openTab();
+      };
+      if (restoredLocal) {
+        finishBoot();
+        return;
       }
+      restoreSessionFromNative().then((restoredNative) => {
+        if (!restoredNative) {
+          openTab();
+          return;
+        }
+        finishBoot();
+      });
     });
 
     window.OmniBrowser = {

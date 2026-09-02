@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "omni-browser": {
+      "command": "build/native/Release/OmniBrowser.exe",
+      "args": ["--mcp"]
+    }
+  }
+}

@@ -22,7 +22,10 @@ void RegisterAdblockApis() {
       [](const ApiContext& ctx, const Json& params, ApiResponder& responder) {
         (void)ctx;
         AdblockService::Get().ApplyPrefs(params);
-        if (params.contains("aggressive") || params.contains("reload")) {
+        // ApplyPrefs() already calls LoadListsIntoEngineLocked() when the
+        // "aggressive" flag changes — calling ReloadEngine() afterwards was a
+        // second full list-reload. Only honour an explicit "reload" request.
+        if (params.value("reload", false)) {
           AdblockService::Get().ReloadEngine();
         }
         const std::string host = params.value("host", "");

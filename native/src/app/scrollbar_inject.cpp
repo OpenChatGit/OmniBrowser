@@ -54,12 +54,32 @@ constexpr const char* kOmniStyleParentJs =
 
 }  // namespace
 
+bool IsFragileDomUrl(const std::string& url) {
+  if (url.empty()) {
+    return false;
+  }
+  auto has = [&](const char* host) {
+    return url.find(host) != std::string::npos;
+  };
+  return has("wikipedia.org") || has("wikimedia.org") ||
+         has("wikidata.org") || has("mediawiki.org") ||
+         has("wiktionary.org") || has("wikisource.org") ||
+         has("wikiquote.org") || has("wikivoyage.org") ||
+         has("wikibooks.org") || has("wikinews.org") ||
+         has("wikiversity.org");
+}
+
 void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
   if (!frame || !frame->IsValid()) {
     return;
   }
   const std::string url = frame->GetURL().ToString();
   if (url.rfind("http://", 0) != 0 && url.rfind("https://", 0) != 0) {
+    return;
+  }
+  // Wikipedia-class pages mutate constantly; scrollbar CSS + a 2.5s
+  // querySelectorAll media probe is enough to CHECK the renderer.
+  if (IsFragileDomUrl(url)) {
     return;
   }
   static const char* kScript = R"JS(
@@ -102,31 +122,97 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
       return true;
     }
 
-    // YouTube/home tiles play a muted clip on mouseenter. That is not a
-    // media session and must not raise the toolbar music button.
+    function isYouTube() {
+      try {
+        var h = location.hostname || '';
+        return h.indexOf('youtube.com') !== -1 || h.indexOf('youtu.be') !== -1 || h.indexOf('youtubekids.com') !== -1;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    function isYouTubeWatchPage() {
+      if (!isYouTube()) return false;
+      try {
+        var p = location.pathname || '';
+        var h = location.hostname || '';
+        if (h.indexOf('music.youtube.com') !== -1) return true;
+        return p.indexOf('/watch') === 0 || p.indexOf('/shorts/') === 0 || p.indexOf('/embed/') === 0 || p.indexOf('/live/') === 0;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    // YouTube/feed tiles play a muted clip on mouseenter/hover or autoplay in feeds.
+    // That is NOT a media session and must NEVER show up in the player or toolbar.
     function isHoverPreview(el) {
       if (!el || el.tagName !== 'VIDEO') return false;
-      try {
-        if (el.closest(
-          'ytd-video-preview,#video-preview,#video-preview-container,' +
-          '#inline-preview-player,ytd-inline-playback-renderer,' +
-          '.ytp-inline-preview-ui,ytd-moving-thumbnail-renderer,' +
-          'ytd-thumbnail-overlay-loading-preview-renderer'
-        )) {
-          return true;
+
+      // On YouTube:
+      if (isYouTube()) {
+        // If not on a dedicated watch page, ANY muted video is purely an inline/hover preview.
+        if (!isYouTubeWatchPage()) {
+          if (el.muted || el.volume === 0) {
+            return true;
+          }
         }
-      } catch (e) {}
+        // Check if this video element is inside any preview/recommendation tile
+        try {
+          if (el.closest(
+            'ytd-video-preview,#video-preview,#video-preview-container,' +
+            '#inline-preview-player,ytd-inline-playback-renderer,' +
+            '.ytp-inline-preview-ui,ytd-moving-thumbnail-renderer,' +
+            'ytd-thumbnail-overlay-loading-preview-renderer,' +
+            'ytd-rich-item-renderer ytd-thumbnail,ytd-compact-video-renderer ytd-thumbnail,' +
+            'ytd-grid-video-renderer ytd-thumbnail,ytd-video-renderer ytd-thumbnail,' +
+            'ytd-reel-item-renderer,ytd-rich-grid-video-renderer ytd-thumbnail,' +
+            'ytd-thumbnail,yt-inline-player,#inline-player,' +
+            '[inline-preview],[is-inline-preview]'
+          )) {
+            return true;
+          }
+        } catch (e) {}
+      } else {
+        // Generic websites: if video is muted, check common feed preview selectors
+        try {
+          if (el.closest(
+            '[data-testid*="preview"],[class*="preview"],[class*="hover-preview"],' +
+            '[id*="preview"],[class*="thumbnail-video"],[class*="feed-video"]'
+          )) {
+            if (el.muted || el.volume === 0) {
+              return true;
+            }
+          }
+        } catch (e) {}
+      }
+
       return false;
     }
 
     function isMainPlayer(el) {
       if (!el) return false;
       if (el.tagName === 'AUDIO') return true;
-      try {
-        if (el.classList && el.classList.contains('html5-main-video')) {
-          return true;
+
+      if (isYouTube()) {
+        if (!isYouTubeWatchPage()) {
+          // On feed/home pages, only an explicitly unmuted and audible video is considered
+          return !el.muted && el.volume > 0 && !isHoverPreview(el);
         }
-        if (el.closest('#movie_player,ytd-watch-flexy #ytd-player,ytd-watch-flexy')) {
+        // On watch page, must be the main watch player
+        try {
+          if (el.closest('#movie_player,ytd-watch-flexy #ytd-player,ytd-watch-flexy,#player-container')) {
+            return true;
+          }
+          if (el.classList && el.classList.contains('html5-main-video') && !isHoverPreview(el)) {
+            return true;
+          }
+        } catch (e) {}
+        return false;
+      }
+
+      // Non-YouTube
+      try {
+        if (el.classList && el.classList.contains('html5-main-video') && !isHoverPreview(el)) {
           return true;
         }
       } catch (e) {}
@@ -137,7 +223,7 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
       if (!el || !isUsable(el) || isHoverPreview(el)) return false;
       if (el.tagName === 'AUDIO') return true;
       if (isMainPlayer(el)) return true;
-      // Unmuted playback = the user is actually listening.
+      // Unmuted playback = the user is actually listening/watching.
       if (!el.muted && el.volume > 0) return true;
       return false;
     }
@@ -147,7 +233,8 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
       var s = 0;
       if (!el.paused) s += 100;
       if (el.tagName === 'VIDEO') s += 20;
-      if (!el.muted && el.volume > 0) s += 10;
+      if (!el.muted && el.volume > 0) s += 50;
+      if (isMainPlayer(el)) s += 30;
       if (el.duration && isFinite(el.duration)) s += 2;
       return s;
     }
@@ -171,7 +258,8 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
       var nodes = document.querySelectorAll('audio,video');
       for (var i = 0; i < nodes.length; i++) {
         var el = nodes[i];
-        if (el.paused) continue;
+        if (el.paused || el.ended) continue;
+        if (isHoverPreview(el)) continue;
         if (el.muted || el.volume === 0) continue;
         return true;
       }
@@ -607,6 +695,9 @@ void InjectAdblockGenericObserver(CefRefPtr<CefFrame> frame,
   if (!frame || !frame->IsValid() || generichide) {
     return;
   }
+  if (IsFragileDomUrl(frame->GetURL().ToString())) {
+    return;
+  }
   // Brave content_cosmetic bundle uses cf_worker.hiddenClassIdSelectors via
   // isolated world. CEF approximation: MutationObserver + cefQuery.
   const std::string exceptions =
@@ -658,6 +749,9 @@ void InjectAdblockGenericObserver(CefRefPtr<CefFrame> frame,
 
 void InjectAdblockSlotCollapse(CefRefPtr<CefFrame> frame) {
   if (!frame || !frame->IsValid()) {
+    return;
+  }
+  if (IsFragileDomUrl(frame->GetURL().ToString())) {
     return;
   }
   // Hide cancelled ad frames/images and collapse empty wrappers (YouTube
@@ -805,8 +899,15 @@ void InjectAdblockCosmetics(CefRefPtr<CefFrame> frame) {
   if (!IsHttpContentUrl(url)) {
     return;
   }
+  if (IsFragileDomUrl(url)) {
+    return;
+  }
   const AdblockCosmeticDecision cosmetics =
       AdblockService::Get().CosmeticsForUrl(url);
+  // Scriptlets must run before CSS: they set up fetch/XHR interceptors,
+  // cookie-banner bypasses, and anti-anti-adblock patches. Mirrors the
+  // brave-core GetScriptletGlobalsScript injection order (OnLoadStart).
+  InjectAdblockScriptletsBrave(frame, cosmetics.injected_script);
   InjectAdblockCosmeticCss(frame, cosmetics.hide_css);
   if (url.find("youtube.com") != std::string::npos ||
       url.find("youtube-nocookie.com") != std::string::npos ||
@@ -821,7 +922,7 @@ void InjectAdblockObservers(CefRefPtr<CefFrame> frame) {
     return;
   }
   const std::string url = frame->GetURL().ToString();
-  if (!IsHttpContentUrl(url)) {
+  if (!IsHttpContentUrl(url) || IsFragileDomUrl(url)) {
     return;
   }
   const AdblockCosmeticDecision cosmetics =
@@ -829,6 +930,24 @@ void InjectAdblockObservers(CefRefPtr<CefFrame> frame) {
   InjectAdblockGenericObserver(frame, cosmetics.exceptions_json,
                                cosmetics.generichide);
   InjectAdblockSlotCollapse(frame);
+
+  // Inject CSS that hides blocked visual resources (images, iframes, video)
+  // matched by their src-attribute. Uses a separate <style> element so it
+  // does not overwrite the cosmetic CSS injected at OnLoadStart.
+  const std::string collapse_css = AdblockService::Get().VisualCollapseCss();
+  if (!collapse_css.empty()) {
+    std::ostringstream vcss;
+    vcss << "(function(){try{" << kOmniStyleParentJs
+         << "var id='omni-adblock-collapse-css';"
+         << "var css='" << JsEscape(collapse_css) << "';"
+         << "var p=omniStyleParent();if(!p)return;"
+         << "var s=document.getElementById(id);if(!s){"
+         << "s=document.createElement('style');s.id=id;"
+         << "s.type='text/css';p.appendChild(s);}"
+         << "s.textContent=css;"
+         << "}catch(e){}})();";
+    frame->ExecuteJavaScript(vcss.str(), frame->GetURL(), 0);
+  }
 }
 
 }  // namespace omni

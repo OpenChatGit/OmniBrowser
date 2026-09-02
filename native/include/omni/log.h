@@ -35,4 +35,21 @@ inline void Log(const std::string& msg) {
   }
 }
 
+/** Overwrite last_crash.txt so the MCP host can report a fresh crash. */
+inline void LogCrash(const std::string& msg) {
+  Log(msg);
+  wchar_t appdata[MAX_PATH] = {};
+  if (GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH) == 0) {
+    return;
+  }
+  const std::wstring path =
+      std::wstring(appdata) + L"\\OmniBrowser\\last_crash.txt";
+  FILE* fp = nullptr;
+  if (_wfopen_s(&fp, path.c_str(), L"w") == 0 && fp) {
+    std::fprintf(fp, "%s\n", msg.c_str());
+    std::fflush(fp);
+    std::fclose(fp);
+  }
+}
+
 }  // namespace omni

@@ -12,17 +12,20 @@ namespace omni {
 namespace {
 
 bool HostIsYoutube(const std::string& url) {
+  if (url.find("youtu") == std::string::npos) {
+    return false;
+  }
   const auto scheme = url.find("://");
   if (scheme == std::string::npos) {
     return false;
   }
   const size_t start = scheme + 3;
   const size_t end = url.find_first_of("/?#", start);
-  const std::string host = url.substr(
-      start, end == std::string::npos ? std::string::npos : end - start);
-  return host.find("youtube.com") != std::string::npos ||
-         host.find("youtube-nocookie.com") != std::string::npos ||
-         host.find("youtubekids.com") != std::string::npos ||
+  const std::string_view host(url.data() + start,
+                              end == std::string::npos ? (url.size() - start) : (end - start));
+  return host.find("youtube.com") != std::string_view::npos ||
+         host.find("youtube-nocookie.com") != std::string_view::npos ||
+         host.find("youtubekids.com") != std::string_view::npos ||
          host == "youtu.be" || host == "www.youtu.be";
 }
 
@@ -119,7 +122,11 @@ OmniAdblockResourceHandler::OnBeforeResourceLoad(
   if (!owner_ || !request) {
     return RV_CONTINUE;
   }
-  if (!owner_->ShouldFilterNetwork(browser)) {
+
+  // Fast-path: main frame and navigation preloads are never ad-blocked.
+  const int cef_type = static_cast<int>(request->GetResourceType());
+  if (cef_type == 0 /* RT_MAIN_FRAME */ ||
+      cef_type == 19 /* RT_NAVIGATION_PRELOAD_MAIN_FRAME */) {
     return RV_CONTINUE;
   }
 
@@ -140,20 +147,23 @@ OmniAdblockResourceHandler::OnBeforeResourceLoad(
   if (frame && frame->IsValid()) {
     source = frame->GetURL().ToString();
   }
-  if (source.empty() && request) {
+  if (source.empty()) {
     source = request->GetReferrerURL().ToString();
-  }
-
-  const int cef_type = static_cast<int>(request->GetResourceType());
-  if (cef_type == 0 /* RT_MAIN_FRAME */ ||
-      cef_type == 19 /* RT_NAVIGATION_PRELOAD_MAIN_FRAME */) {
-    return RV_CONTINUE;
   }
 
   const char* rtype = AdblockRequestTypeFromCef(cef_type);
   const std::string method = request->GetMethod().ToString();
   const AdblockNetworkDecision decision =
       adblock.CheckNetwork(url, source, rtype, method);
+
+  // $redirect rules: serve a synthetic resource (e.g. 1x1 transparent GIF,
+  // noop script) instead of the tracker URL. CEF follows data: URLs natively,
+  // so we just swap the URL and let the request proceed — the browser loads
+  // the inline payload without hitting the network.
+  if (!decision.redirect_data_url.empty()) {
+    request->SetURL(decision.redirect_data_url);
+    return RV_CONTINUE;
+  }
 
   if (!decision.rewritten_url.empty() && decision.rewritten_url != url) {
     request->SetURL(decision.rewritten_url);

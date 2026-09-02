@@ -4,6 +4,8 @@ Desktop browser for **Windows** today: **C++** host + **CEF** (Chromium). No Ele
 
 Default search is **QuBrain Search**. Chrome, tabs, start page, private windows, and library pages (History, Bookmarks, Downloads) live in this repo.
 
+Native **MCP (Model Context Protocol)** and **ACP (Agent Control Protocol)** server support allows AI assistants (Claude, Cursor, Antigravity, custom agents) to directly control tabs, navigate, extract markdown content, and execute browser interactions. See [MCP Integration Documentation](docs/MCP_INTEGRATION.md).
+
 ---
 
 ## What you need
@@ -127,7 +129,7 @@ cd C:\Users\Nicol\Documents\Github\browser\build\native\Release
 .\OmniBrowser.exe
 ```
 
-Do not copy only `OmniBrowser.exe` to another directory. If you need a second name (e.g. `OmniLauncher.exe`), copy it **next to** the other files in `Release\`, then start from that folder.
+Do not copy only `OmniBrowser.exe` to another directory without the accompanying DLLs, assets, and resources. Always run it inside the `Release\` folder.
 
 ### Daily loop
 

@@ -341,23 +341,7 @@ bool AdblockService::ApplyPrefs(const nlohmann::json& prefs) {
   return true;
 }
 
-bool AdblockService::IsAllowlistedLocked(const std::string& url) const {
-  const std::string host = HostOf(url);
-  if (host.empty()) {
-    return false;
-  }
-  if (allowlist_.count(host)) {
-    return true;
-  }
-  for (const auto& entry : allowlist_) {
-    if (host.size() > entry.size() &&
-        host[host.size() - entry.size() - 1] == '.' &&
-        host.compare(host.size() - entry.size(), entry.size(), entry) == 0) {
-      return true;
-    }
-  }
-  return false;
-}
+
 
 bool AdblockService::IsAllowlisted(const std::string& url) const {
   std::lock_guard<std::mutex> lock(mu_);
@@ -591,9 +575,33 @@ void AdblockService::SavePrefsLocked() {
                    {"allowlist", hosts},
                    {"lastUpdateTs", last_update_ts_},
                    {"blockedTotal", blocked_total_}};
-  WriteFileAtomic(std::filesystem::path(utf8::Widen(paths::AdblockPrefsPath())),
-                  prefs.dump(2));
+  const std::string content = prefs.dump(2);
+  const std::string path = paths::AdblockPrefsPath();
+  std::thread([path, content]() {
+    WriteFileAtomic(std::filesystem::path(utf8::Widen(path)), content);
+  }).detach();
   blocks_since_save_ = 0;
+}
+
+bool AdblockService::IsAllowlistedLocked(const std::string& url) const {
+  if (allowlist_.empty()) {
+    return false;
+  }
+  const std::string host = HostOf(url);
+  if (host.empty()) {
+    return false;
+  }
+  if (allowlist_.count(host)) {
+    return true;
+  }
+  for (const auto& entry : allowlist_) {
+    if (host.size() > entry.size() &&
+        host[host.size() - entry.size() - 1] == '.' &&
+        host.compare(host.size() - entry.size(), entry.size(), entry) == 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 std::vector<std::string> AdblockService::CollectListPathsLocked() const {
@@ -611,10 +619,12 @@ std::vector<std::string> AdblockService::CollectListPathsLocked() const {
   };
 
   push_if(bundled / "omni-baseline.txt");
-  // Brave Default Adblock + Privacy + First-Party + Cookie (desktop).
+  // -----------------------------------------------------------------------
+  // Brave Default Adblock Filters (uuid: "default", always enabled)
+  // Source: adblock-resources/filter_lists/list_catalog.json
+  // -----------------------------------------------------------------------
   static const char* kDefaultFiles[] = {
-      "easylist.txt",
-      "easyprivacy.txt",
+      // uBlock Origin yearly + evergreen filters
       "ublock-filters.txt",
       "ublock-filters-2020.txt",
       "ublock-filters-2021.txt",
@@ -625,27 +635,40 @@ std::vector<std::string> AdblockService::CollectListPathsLocked() const {
       "ublock-filters-2026.txt",
       "ublock-filters-general.txt",
       "ublock-badware.txt",
-      "ublock-privacy.txt",
       "ublock-resource-abuse.txt",
-      "ublock-quick-fixes.txt",
       "ublock-unbreak.txt",
+      "ublock-quick-fixes.txt",
       "ublock-link-shorteners.txt",
+      // EasyList
+      "easylist.txt",
+      // URLhaus malicious URL blocklist
       "urlhaus.txt",
-      "brave-unbreak.txt",
+      // Brave-specific lists
+      "brave-unbreak.txt",          // from brave/adblock-lists root
+      "brave-unbreak-lists.txt",    // from brave/adblock-lists/brave-lists
       "brave-specific.txt",
       "brave-social.txt",
       "brave-sugarcoat.txt",
+      // Brave Privacy Filters (uuid: "4D715457", always enabled)
+      "easyprivacy.txt",
+      "ublock-privacy.txt",
+      // Brave First-Party Filters (uuid: "E99CBD02", always enabled)
       "brave-firstparty.txt",
       "brave-firstparty-regional.txt",
+      // Cookie notice blocker (uuid: "AC023D22", default_enabled)
       "easylist-cookie.txt",
       "ublock-cookies.txt",
       "brave-cookie-specific.txt",
+      // Mobile app promo blocker (uuid: "2F3DCE16", default_enabled)
+      "fanboy-mobile-notifications.txt",
   };
   for (const char* name : kDefaultFiles) {
     push_if(user / name);
   }
   if (aggressive_) {
+    // Annoying distractions blocker (uuid: "67E792D4")
     push_if(user / "fanboy-annoyance.txt");
+    push_if(user / "ublock-annoyances-others.txt");
   }
   return paths_out;
 }
@@ -719,60 +742,90 @@ struct ListJob {
 };
 
 constexpr ListJob kListJobs[] = {
-    {L"https://easylist.to/easylist/easylist.txt", "easylist.txt"},
-    {L"https://easylist.to/easylist/easyprivacy.txt", "easyprivacy.txt"},
-    {L"https://ublockorigin.github.io/uAssets/filters/filters.txt",
+    // -----------------------------------------------------------------------
+    // Brave Default Adblock Filters (uuid: "default")
+    // Sources: raw.githubusercontent.com/uBlockOrigin/uAssets  (Brave uses
+    //          raw.githubusercontent.com, not ublockorigin.github.io mirror)
+    // -----------------------------------------------------------------------
+    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt",
      "ublock-filters.txt"},
-    {L"https://ublockorigin.github.io/uAssets/filters/filters-2020.txt",
+    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2020.txt",
      "ublock-filters-2020.txt"},
-    {L"https://ublockorigin.github.io/uAssets/filters/filters-2021.txt",
+    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2021.txt",
      "ublock-filters-2021.txt"},
-    {L"https://ublockorigin.github.io/uAssets/filters/filters-2022.txt",
+    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2022.txt",
      "ublock-filters-2022.txt"},
-    {L"https://ublockorigin.github.io/uAssets/filters/filters-2023.txt",
+    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2023.txt",
      "ublock-filters-2023.txt"},
-    {L"https://ublockorigin.github.io/uAssets/filters/filters-2024.txt",
+    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2024.txt",
      "ublock-filters-2024.txt"},
-    {L"https://ublockorigin.github.io/uAssets/filters/filters-2025.txt",
+    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2025.txt",
      "ublock-filters-2025.txt"},
-    {L"https://ublockorigin.github.io/uAssets/filters/filters-2026.txt",
+    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2026.txt",
      "ublock-filters-2026.txt"},
-    {L"https://ublockorigin.github.io/uAssets/filters/filters-general.txt",
+    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-general.txt",
      "ublock-filters-general.txt"},
-    {L"https://ublockorigin.github.io/uAssets/filters/badware.txt",
+    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/badware.txt",
      "ublock-badware.txt"},
-    {L"https://ublockorigin.github.io/uAssets/filters/privacy.txt",
-     "ublock-privacy.txt"},
-    {L"https://ublockorigin.github.io/uAssets/filters/resource-abuse.txt",
+    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/resource-abuse.txt",
      "ublock-resource-abuse.txt"},
-    {L"https://ublockorigin.github.io/uAssets/filters/quick-fixes.txt",
-     "ublock-quick-fixes.txt"},
-    {L"https://ublockorigin.github.io/uAssets/filters/unbreak.txt",
+    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt",
      "ublock-unbreak.txt"},
-    {L"https://ublockorigin.github.io/uAssets/filters/ubo-link-shorteners.txt",
+    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/quick-fixes.txt",
+     "ublock-quick-fixes.txt"},
+    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/ubo-link-shorteners.txt",
      "ublock-link-shorteners.txt"},
+    {L"https://easylist.to/easylist/easylist.txt",
+     "easylist.txt"},
     {L"https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-agh-online.txt",
      "urlhaus.txt"},
+    // Brave-specific (Default list)
     {L"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-unbreak.txt",
      "brave-unbreak.txt"},
+    {L"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-unbreak.txt",
+     "brave-unbreak-lists.txt"},
     {L"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-specific.txt",
      "brave-specific.txt"},
     {L"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-social.txt",
      "brave-social.txt"},
     {L"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-sugarcoat.txt",
      "brave-sugarcoat.txt"},
+    // -----------------------------------------------------------------------
+    // Brave Default Privacy Filters (uuid: "4D715457")
+    // -----------------------------------------------------------------------
+    {L"https://easylist.to/easylist/easyprivacy.txt",
+     "easyprivacy.txt"},
+    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt",
+     "ublock-privacy.txt"},
+    // -----------------------------------------------------------------------
+    // Brave First-Party Filters (uuid: "E99CBD02")
+    // -----------------------------------------------------------------------
     {L"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-firstparty.txt",
      "brave-firstparty.txt"},
     {L"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-firstparty-regional.txt",
      "brave-firstparty-regional.txt"},
+    // -----------------------------------------------------------------------
+    // Cookie notice blocker (uuid: "AC023D22", default_enabled)
+    // -----------------------------------------------------------------------
     {L"https://secure.fanboy.co.nz/fanboy-cookiemonster_ubo.txt",
      "easylist-cookie.txt"},
-    {L"https://ublockorigin.github.io/uAssets/filters/annoyances-cookies.txt",
+    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/annoyances-cookies.txt",
      "ublock-cookies.txt"},
     {L"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-cookie-specific.txt",
      "brave-cookie-specific.txt"},
-    {L"https://easylist.to/easylist/fanboy-annoyance.txt",
+    // -----------------------------------------------------------------------
+    // Mobile app promo blocker (uuid: "2F3DCE16", default_enabled)
+    // -----------------------------------------------------------------------
+    {L"https://secure.fanboy.co.nz/fanboy-mobile-notifications.txt",
+     "fanboy-mobile-notifications.txt"},
+    // -----------------------------------------------------------------------
+    // Annoying distractions (uuid: "67E792D4") — loaded only in aggressive mode
+    // Brave uses fanboy-annoyance_ubo.txt, NOT the generic fanboy-annoyance.txt
+    // -----------------------------------------------------------------------
+    {L"https://secure.fanboy.co.nz/fanboy-annoyance_ubo.txt",
      "fanboy-annoyance.txt"},
+    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/annoyances-others.txt",
+     "ublock-annoyances-others.txt"},
 };
 
 }  // namespace

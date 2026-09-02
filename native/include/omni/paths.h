@@ -18,6 +18,15 @@ std::string BookmarksPath();
 // Persistent download list (JSON array).
 std::string DownloadsPath();
 
+// User settings (JSON object).
+std::string SettingsPath();
+
+// Browser tab session snapshot for plugins (JSON object).
+std::string SessionPath();
+
+// Bundled plugin manifests under ui/plugins/.
+std::string PluginsDir();
+
 // Optional tab payload when spawning a new window (window.newWithTab).
 std::string PendingOpenTabPath();
 

@@ -292,5 +292,167 @@
         }
       );
     },
+    appInfo() {
+      return nativeQuery({ method: "app.info", params: {} });
+    },
+    apiList() {
+      return nativeQuery({ method: "api.list", params: {} });
+    },
+    settingsGet(key) {
+      const params = {};
+      if (key != null && String(key).length > 0) {
+        params.key = String(key);
+      }
+      return nativeQuery({ method: "settings.get", params });
+    },
+    settingsSet(key, value) {
+      if (value !== undefined && typeof key === "string") {
+        return nativeQuery({ method: "settings.set", params: { key, value } });
+      }
+      if (key && typeof key === "object") {
+        return nativeQuery({ method: "settings.set", params: { settings: key } });
+      }
+      return nativeQuery({ method: "settings.set", params: key || {} });
+    },
+    sessionGet() {
+      return nativeQuery({ method: "session.get", params: {} });
+    },
+    sessionSet(session) {
+      return nativeQuery({
+        method: "session.set",
+        params: {
+          session: session && typeof session === "object" ? session : {},
+        },
+      });
+    },
+    tabsList() {
+      return nativeQuery({ method: "tabs.list", params: {} });
+    },
+    tabsGet(tabId) {
+      return nativeQuery({
+        method: "tabs.get",
+        params: { tabId: String(tabId || "") },
+      });
+    },
+    pluginsList() {
+      return nativeQuery({ method: "plugins.list", params: {} });
+    },
+    pluginsRegister(id, enabled = true) {
+      return nativeQuery({
+        method: "plugins.register",
+        params: { id: String(id || ""), enabled: Boolean(enabled) },
+      });
+    },
+    downloadsList() {
+      return nativeQuery({ method: "downloads.list", params: {} });
+    },
+    downloadsRemove(id) {
+      return nativeQuery({
+        method: "downloads.remove",
+        params: { id: String(id || "") },
+      });
+    },
+    downloadsClear() {
+      return nativeQuery({ method: "downloads.clear", params: {} });
+    },
+    downloadsOpen(path) {
+      return nativeQuery({
+        method: "downloads.open",
+        params: { path: String(path || "") },
+      });
+    },
+    downloadsShowInFolder(path) {
+      return nativeQuery({
+        method: "downloads.showInFolder",
+        params: { path: String(path || "") },
+      });
+    },
+    libraryList() {
+      return nativeQuery({ method: "library.list", params: {} });
+    },
+    libraryAdd(entry) {
+      return nativeQuery({
+        method: "library.add",
+        params: entry && typeof entry === "object" ? entry : {},
+      });
+    },
+    libraryUpdate(entry) {
+      return nativeQuery({
+        method: "library.update",
+        params: entry && typeof entry === "object" ? entry : {},
+      });
+    },
+    libraryRemove(id) {
+      return nativeQuery({
+        method: "library.remove",
+        params: { id: Number(id) || 0 },
+      });
+    },
+    libraryLaunch(id) {
+      return nativeQuery({
+        method: "library.launch",
+        params: { id: Number(id) || 0 },
+      });
+    },
+    libraryPickExe() {
+      return nativeQuery({ method: "library.pickExe", params: {} });
+    },
+    libraryRunning() {
+      return nativeQuery({ method: "library.running", params: {} });
+    },
+    terminalOpen(params = {}) {
+      return nativeQuery({ method: "terminal.open", params });
+    },
+    terminalWrite(id, data, { base64 = false } = {}) {
+      return nativeQuery({
+        method: "terminal.write",
+        params: { id: String(id || ""), data: String(data || ""), base64 },
+      });
+    },
+    terminalResize(id, cols, rows) {
+      return nativeQuery({
+        method: "terminal.resize",
+        params: {
+          id: String(id || ""),
+          cols: Number(cols) || 80,
+          rows: Number(rows) || 24,
+        },
+      });
+    },
+    terminalClose(id) {
+      return nativeQuery({
+        method: "terminal.close",
+        params: { id: String(id || "") },
+      });
+    },
+    terminalSubscribe(id, onEvent) {
+      return nativeQuery(
+        { method: "terminal.subscribe", params: { id: String(id || "") } },
+        {
+          persistent: true,
+          onMessage(msg, err) {
+            if (typeof onEvent === "function") {
+              onEvent(msg, err);
+            }
+          },
+        }
+      );
+    },
+    gitStatus(cwd) {
+      return nativeQuery({
+        method: "git.status",
+        params: { cwd: String(cwd || "") },
+      });
+    },
+    adblockCosmetics(url) {
+      return nativeQuery({
+        method: "browser.adblock.cosmetics",
+        params: { url: String(url || "") },
+      });
+    },
+
+    agentPause() {
+      return nativeQuery({ method: "agent.pause", params: {} });
+    },
   };
 })();

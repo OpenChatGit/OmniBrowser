@@ -202,6 +202,10 @@ bool HandleBrowserCommand(
     const std::string tab_id = params.value("tabId", "");
     const bool muted = params.value("muted", false);
     if (tab_id.empty()) {
+      if (owner->ActiveContentTabId().empty()) {
+        callback->Failure(404, "No active content tab");
+        return true;
+      }
       owner->SetContentAudioMuted(muted);
     } else {
       owner->SetContentAudioMuted(tab_id, muted);
