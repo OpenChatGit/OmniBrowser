@@ -1,5 +1,5 @@
 :root {
-  color-scheme: dark;
+  color-scheme: dark light;
 }
 
 * {
@@ -12,7 +12,7 @@ body {
   min-height: 100%;
   background:
     radial-gradient(1200px 600px at 50% -10%, rgba(102, 192, 244, 0.06), transparent 55%),
-    linear-gradient(180deg, #161516 0%, var(--bg-deep) 48%, #101010 100%);
+    var(--page-wash);
   color: var(--text);
   font-family: var(--font);
 }
@@ -90,7 +90,7 @@ body {
 
 .hist-nav.is-active {
   border-color: var(--stroke);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--fill-01);
   color: var(--text);
 }
 
@@ -123,7 +123,7 @@ body {
   padding: 0 12px;
   border: 1px solid var(--stroke);
   border-radius: 10px;
-  background: rgba(36, 35, 36, 0.9);
+  background: var(--bg-elevated);
 }
 
 .hist-search-icon {
@@ -169,7 +169,7 @@ body {
   padding: 0;
   border: 1px solid var(--stroke);
   border-radius: 10px;
-  background: rgba(36, 35, 36, 0.9);
+  background: var(--bg-elevated);
   color: var(--text);
   cursor: pointer;
 }
@@ -218,7 +218,7 @@ body {
 }
 
 .hist-row:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--fill-01);
 }
 
 .hist-row input[type="checkbox"] {
@@ -227,9 +227,9 @@ body {
   width: 18px;
   height: 18px;
   margin: 0;
-  border: 1.5px solid rgba(255, 255, 255, 0.28);
+  border: 1.5px solid var(--stroke-02);
   border-radius: 5px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--fill-01);
   cursor: pointer;
   transition:
     background 120ms ease,
@@ -238,8 +238,8 @@ body {
 }
 
 .hist-row input[type="checkbox"]:hover {
-  border-color: rgba(255, 255, 255, 0.45);
-  background: rgba(255, 255, 255, 0.08);
+  border-color: var(--muted);
+  background: var(--fill-02);
 }
 
 .hist-row input[type="checkbox"]:checked {

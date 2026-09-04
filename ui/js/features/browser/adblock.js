@@ -215,21 +215,37 @@
       return prefs;
     }
 
-    btn.addEventListener("click", (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      if (open) {
-        hideOverlay();
-        return;
+    btn.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        if (open) {
+          hideOverlay();
+        } else {
+          setOpen(true);
+        }
       }
-      if (
-        window.OmniOverlayManager &&
-        OmniOverlayManager.shouldSuppressOpen(OmniOverlayManager.PANEL_ADBLOCK)
-      ) {
-        return;
-      }
-      setOpen(true);
     });
+
+    if (window.OmniOverlayManager && typeof OmniOverlayManager.bindToggle === "function") {
+      OmniOverlayManager.register(OmniOverlayManager.PANEL_ADBLOCK, {
+        close: hideOverlay,
+      });
+      OmniOverlayManager.bindToggle(OmniOverlayManager.PANEL_ADBLOCK, btn, {
+        isOpen: () => open,
+        open: () => setOpen(true),
+        close: hideOverlay,
+      });
+    } else {
+      btn.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (open) {
+          hideOverlay();
+          return;
+        }
+        setOpen(true);
+      });
+    }
 
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && open) {
@@ -250,15 +266,8 @@
         }
         if (show) {
           await refresh();
-          // Live total while the card is visible.
           statsTimer = setInterval(() => {
-            if (window.OmniOverlayManager) {
-      OmniOverlayManager.register(OmniOverlayManager.PANEL_ADBLOCK, {
-        close: markClosed,
-      });
-    }
-
-    refresh().catch(() => {});
+            refresh().catch(() => {});
           }, 2000);
         }
       });

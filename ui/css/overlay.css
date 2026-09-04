@@ -13,8 +13,9 @@ body {
   min-height: 0;
   overflow: hidden !important;
   scrollbar-width: none;
-  background: #292829;
-  color: var(--text, #ececec);
+  color-scheme: inherit;
+  background: var(--bg-panel);
+  color: var(--text);
   font-family: "Segoe UI", system-ui, sans-serif;
   user-select: none;
 }
@@ -28,7 +29,7 @@ body::-webkit-scrollbar,
 }
 
 body.is-tab-tip {
-  background: #292829;
+  background: var(--bg-panel);
 }
 
 body.is-history,
@@ -38,7 +39,7 @@ html:has(body.is-history) {
 
 body.is-media,
 body.is-shields {
-  background: #2b2a2b;
+  background: var(--bg-panel);
 }
 
 #overlay-root {
@@ -51,10 +52,10 @@ body.is-shields {
 #overlay-root .omni-tab-tip {
   width: 280px;
   box-sizing: border-box;
-  background: #292829;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-panel);
+  border: 1px solid var(--stroke);
   border-radius: 0;
-  color: var(--text, #ececec);
+  color: var(--text);
   font-family: inherit;
   pointer-events: none;
 }
@@ -64,7 +65,7 @@ body.is-shields {
 }
 
 #overlay-root .omni-tab-tip-title {
-  color: #f2f2f2;
+  color: var(--text);
   font-size: 0.78rem;
   font-weight: 600;
   letter-spacing: -0.015em;
@@ -74,7 +75,7 @@ body.is-shields {
 
 #overlay-root .omni-tab-tip-domain {
   margin-top: 0.2rem;
-  color: rgba(255, 255, 255, 0.52);
+  color: var(--muted);
   font-size: 0.7rem;
   font-weight: 450;
   letter-spacing: -0.01em;
@@ -83,7 +84,7 @@ body.is-shields {
 
 #overlay-root .omni-tab-tip-meta {
   padding: 0.55rem 0.85rem 0.7rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--stroke-01);
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
@@ -93,7 +94,7 @@ body.is-shields {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--text);
   font-size: 0.7rem;
   font-weight: 450;
   letter-spacing: -0.01em;
@@ -104,7 +105,7 @@ body.is-shields {
   flex: 0 0 auto;
   width: 14px;
   height: 14px;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--muted);
 }
 
 /* History flyout — mirrors native Views menu styling. */
@@ -112,8 +113,8 @@ body.is-shields {
   width: 300px;
   max-width: 300px;
   padding: 4px 0;
-  background: #2b2a2b;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-panel);
+  border: 1px solid var(--stroke);
   border-radius: 0;
   box-shadow: none;
   pointer-events: auto;
@@ -122,7 +123,7 @@ body.is-shields {
 #overlay-root .omni-history-sep {
   height: 1px;
   margin: 4px 10px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--fill-02);
 }
 
 #overlay-root .omni-history-item {
@@ -134,7 +135,7 @@ body.is-shields {
   padding: 7px 14px;
   border: 0;
   background: transparent;
-  color: #f0f0f0;
+  color: var(--text);
   font: inherit;
   font-size: 0.8rem;
   font-weight: 450;
@@ -144,7 +145,7 @@ body.is-shields {
 }
 
 #overlay-root .omni-history-item:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--fill-02);
 }
 
 #overlay-root .omni-history-item:disabled {
@@ -176,7 +177,7 @@ body.is-shields {
 #overlay-root .omni-history-shortcut {
   flex: 0 0 auto;
   margin-left: 12px;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--muted);
   font-size: 0.72rem;
   font-weight: 450;
   letter-spacing: 0.01em;
@@ -188,11 +189,11 @@ body.is-shields {
   max-width: 320px;
   padding: 12px 12px 10px;
   box-sizing: border-box;
-  background: #2b2a2b;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-panel);
+  border: 1px solid var(--stroke);
   border-radius: 0;
   box-shadow: none;
-  color: #f0f0f0;
+  color: var(--text);
   font-family: inherit;
   pointer-events: auto;
 }
@@ -209,7 +210,7 @@ body.is-shields {
   height: 64px;
   border-radius: 2px;
   object-fit: cover;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--fill-01);
   display: block;
 }
 
@@ -217,10 +218,10 @@ body.is-shields {
   width: 64px;
   height: 64px;
   border-radius: 2px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--fill-01);
   display: grid;
   place-items: center;
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--muted);
 }
 
 #overlay-root .omni-media-meta {
@@ -234,7 +235,7 @@ body.is-shields {
   gap: 6px;
   min-width: 0;
   margin-bottom: 4px;
-  color: rgba(255, 255, 255, 0.52);
+  color: var(--muted);
   font-size: 0.72rem;
   font-weight: 450;
   letter-spacing: -0.01em;
@@ -247,7 +248,7 @@ body.is-shields {
   border-radius: 2px;
   flex-shrink: 0;
   object-fit: contain;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--fill-01);
 }
 
 #overlay-root .omni-media-origin {
@@ -263,7 +264,7 @@ body.is-shields {
   font-weight: 600;
   letter-spacing: -0.015em;
   line-height: 1.3;
-  color: #f2f2f2;
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -275,7 +276,7 @@ body.is-shields {
   font-weight: 450;
   letter-spacing: -0.01em;
   line-height: 1.25;
-  color: rgba(255, 255, 255, 0.52);
+  color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -296,7 +297,7 @@ body.is-shields {
   padding: 0;
   border-radius: 0;
   background: transparent;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -304,8 +305,8 @@ body.is-shields {
 }
 
 #overlay-root .omni-media-icon-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: var(--fill-02);
+  color: var(--text);
 }
 
 #overlay-root .omni-media-play {
@@ -314,8 +315,8 @@ body.is-shields {
   width: 40px;
   height: 40px;
   border-radius: 0;
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
+  background: var(--fill-02);
+  color: var(--text);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -323,7 +324,7 @@ body.is-shields {
 }
 
 #overlay-root .omni-media-play:hover {
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--fill-03);
 }
 
 #overlay-root .omni-media-seek {
@@ -332,7 +333,7 @@ body.is-shields {
   gap: 2px;
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--stroke-01);
 }
 
 #overlay-root .omni-media-seek .omni-media-icon-btn {
@@ -354,7 +355,7 @@ body.is-shields {
 #overlay-root .omni-media-range::-webkit-slider-runnable-track {
   height: 3px;
   border-radius: 0;
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--fill-04);
 }
 
 #overlay-root .omni-media-range::-webkit-slider-thumb {
@@ -363,21 +364,21 @@ body.is-shields {
   height: 14px;
   margin-top: -5.5px;
   border-radius: 0;
-  background: rgba(255, 255, 255, 0.88);
+  background: var(--text);
   border: 0;
 }
 
 #overlay-root .omni-media-range::-moz-range-track {
   height: 3px;
   border-radius: 0;
-  background: rgba(255, 255, 255, 0.18);
+  background: var(--fill-04);
 }
 
 #overlay-root .omni-media-range::-moz-range-thumb {
   width: 3px;
   height: 14px;
   border-radius: 0;
-  background: rgba(255, 255, 255, 0.88);
+  background: var(--text);
   border: 0;
 }
 
@@ -386,11 +387,11 @@ body.is-shields {
   width: 320px;
   max-width: 320px;
   box-sizing: border-box;
-  background: #2b2a2b;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-panel);
+  border: 1px solid var(--stroke);
   border-radius: 0;
   box-shadow: none;
-  color: #f0f0f0;
+  color: var(--text);
   font-family: inherit;
   pointer-events: auto;
 }
@@ -426,7 +427,7 @@ body.is-shields {
   flex: 0 0 auto;
   display: block;
   object-fit: cover;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--fill-01);
 }
 
 #overlay-root .omni-shield-domain {
@@ -437,19 +438,19 @@ body.is-shields {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #f2f2f2;
+  color: var(--text);
 }
 
 #overlay-root .omni-shield-status {
   font-size: 0.74rem;
   line-height: 1.25;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--muted);
   /* Align under domain text: favicon 18px + gap 8px */
   padding-left: 26px;
 }
 
 #overlay-root .omni-shield-status strong {
-  color: #f0f0f0;
+  color: var(--text);
   font-weight: 650;
 }
 
@@ -462,13 +463,13 @@ body.is-shields {
   margin: 0;
   border: 0;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.16);
+  background: var(--fill-04);
   cursor: pointer;
   padding: 0;
 }
 
 #overlay-root .omni-shield-toggle.is-on {
-  background: #1a9fff;
+  background: var(--accent-strong);
 }
 
 #overlay-root .omni-shield-toggle::after {
@@ -479,13 +480,14 @@ body.is-shields {
   width: 16px;
   height: 16px;
   border-radius: 50%;
-  background: #121112;
+  background: var(--bg-panel);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
   transition: transform 0.12s ease;
 }
 
 #overlay-root .omni-shield-toggle.is-on::after {
   transform: translateX(18px);
-  background: #0b1c28;
+  background: #ffffff;
 }
 
 #overlay-root .omni-shield-stat {
@@ -496,14 +498,14 @@ body.is-shields {
   margin: 0 14px;
   padding: 10px 12px;
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.28);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--fill-02);
+  border: 1px solid var(--stroke-01);
   font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--muted);
 }
 
 #overlay-root .omni-shield-stat-count {
-  color: #fff;
+  color: var(--text);
   font-weight: 700;
   font-size: 0.95rem;
   letter-spacing: -0.02em;
@@ -512,7 +514,7 @@ body.is-shields {
 #overlay-root .omni-shield-divider {
   height: 1px;
   margin: 12px 14px 0;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--fill-02);
 }
 
 #overlay-root .omni-shield-advanced-btn {
@@ -524,7 +526,7 @@ body.is-shields {
   padding: 10px 14px;
   border: 0;
   background: transparent;
-  color: #f0f0f0;
+  color: var(--text);
   font: inherit;
   font-size: 0.8rem;
   cursor: pointer;
@@ -532,7 +534,7 @@ body.is-shields {
 }
 
 #overlay-root .omni-shield-advanced-btn:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--fill-01);
 }
 
 #overlay-root .omni-shield-icon,
@@ -540,7 +542,7 @@ body.is-shields {
   display: inline-flex;
   width: 16px;
   height: 16px;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--muted);
 }
 
 #overlay-root .omni-shield-chevron {
@@ -567,25 +569,25 @@ body.is-shields {
   gap: 12px;
   padding: 7px 0;
   font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--muted);
 }
 
 #overlay-root .omni-shield-advanced-row span {
-  color: #f0f0f0;
+  color: var(--text);
 }
 
 #overlay-root .omni-shield-foot {
   margin-top: 2px;
   padding: 10px 14px 12px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.18);
+  border-top: 1px solid var(--stroke-01);
+  background: var(--fill-01);
   font-size: 0.7rem;
   line-height: 1.4;
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--muted);
 }
 
 #overlay-root .omni-shield-learn {
-  color: #66c0f4;
+  color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 2px;
 }

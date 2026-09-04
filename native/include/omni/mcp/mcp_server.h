@@ -56,8 +56,11 @@ class McpServer {
 
 #if defined(_WIN32)
   // Named mutex held by the GUI process so --mcp agents can see it
-  // even before 127.0.0.1:8999 is listening.
+  // even before 127.0.0.1:8999 is listening. A second GUI must never
+  // call CefInitialize with the same profile (Chromium CHECK / 0xC0000409).
   static constexpr wchar_t kGuiMutexName[] = L"Local\\OmniBrowser.GuiRunning";
+  static bool FocusExistingGuiWindow();
+  static void TerminateStaleGuiProcesses();
 #endif
 
   // Core JSON-RPC 2.0 Dispatcher
@@ -102,6 +105,7 @@ class McpServer {
   Json ToolEvalJs(const Json& args);
   Json ToolClick(const Json& args);
   Json ToolFill(const Json& args);
+  Json ToolUploadFile(const Json& args);
   Json ToolScroll(const Json& args);
   Json ToolGetHistory(const Json& args);
   Json ToolGetBookmarks(const Json& args);

@@ -1,22 +1,22 @@
 .topbar-adblock {
-  color: #f2f2f2;
+  color: var(--text);
   transition: color 0.15s ease, opacity 0.15s ease, background 0.15s ease;
 }
 
 .topbar-adblock.is-off {
-  color: rgba(255, 255, 255, 0.28);
+  color: var(--stroke-02);
 }
 
 .topbar-adblock.is-off:hover:not(:disabled) {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--muted);
 }
 
 .topbar-adblock.is-on:hover:not(:disabled) {
-  color: #ffffff;
+  color: var(--text);
 }
 
 .topbar-adblock.is-open {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--fill-02);
 }
 
 /* Fallback only when native overlay host is unavailable. */
@@ -26,9 +26,9 @@
   width: min(320px, calc(100vw - 16px));
   padding: 0.85rem 0.9rem;
   border-radius: 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: #2b2a2b;
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--stroke-01);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow);
   color: var(--text);
   font-family: var(--font);
   font-size: 0.8rem;
@@ -62,20 +62,20 @@
   padding: 0.35rem 0.5rem;
   text-decoration: underline;
   text-underline-offset: 3px;
-  text-decoration-color: rgba(255, 255, 255, 0.18);
+  text-decoration-color: var(--fill-04);
 }
 
 .browser-start-stats-toggle:hover {
   color: var(--text);
-  text-decoration-color: rgba(255, 255, 255, 0.4);
+  text-decoration-color: var(--muted);
 }
 
 .browser-start-stats-card {
   width: 100%;
   padding: 1rem 1.1rem 1.05rem;
   border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(26, 25, 26, 0.92);
+  border: 1px solid var(--stroke-01);
+  background: var(--bg-panel);
   box-shadow: var(--shadow);
   text-align: center;
   animation: omni-stats-in 0.22s ease;
@@ -96,7 +96,7 @@
   font-size: 2rem;
   font-weight: 700;
   letter-spacing: -0.03em;
-  color: #fff;
+  color: var(--text);
   line-height: 1.1;
 }
 

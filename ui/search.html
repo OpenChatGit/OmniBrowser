@@ -4,6 +4,24 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Search</title>
+  <script>
+    (function () {
+      var KEY = "omni.appearance";
+      var pref = "system";
+      var cachedTheme = "";
+      try {
+        pref = localStorage.getItem(KEY) || "system";
+        cachedTheme = localStorage.getItem(KEY + ".theme") || "";
+      } catch (e) {}
+      if (pref !== "light" && pref !== "dark") pref = "system";
+      var dark = !window.matchMedia || window.matchMedia("(prefers-color-scheme: dark)").matches;
+      var theme = pref === "light" ? "light" : pref === "dark" ? "dark"
+        : (cachedTheme === "light" || cachedTheme === "dark") ? cachedTheme
+        : (dark ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+      document.documentElement.style.colorScheme = theme;
+    })();
+  </script>
   <link rel="stylesheet" href="css/tokens.css" />
   <link rel="stylesheet" href="css/scrollbar.css" />
   <link rel="stylesheet" href="css/search.css" />
@@ -62,6 +80,8 @@
       </div>
     </div>
   </div>
+  <script src="js/lib/theme.js"></script>
+  <script>if (window.OmniTheme) OmniTheme.boot();</script>
   <script src="js/search.js"></script>
 </body>
 </html>

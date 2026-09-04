@@ -32,9 +32,10 @@ OmniBrowser includes native, built-in support for **Model Context Protocol (MCP)
 | `browser_go_forward` | Go forward in history | None |
 | `browser_extract_content` | Extract capped page text, title, and URL | `tabId` (string, optional) |
 | `browser_get_html` | Get size-capped HTML (never a full Wikipedia DOM) | `selector` (string, optional), `tabId` (string, optional) |
-| `browser_eval_js` | Evaluate JavaScript expression in page | `expression` (string, required), `tabId` (string, optional) |
+| `browser_eval_js` | Evaluate JavaScript via CDP (not blocked by page CSP) | `expression` (string, required), `tabId` (string, optional) |
 | `browser_click` | Click DOM element by CSS selector | `selector` (string, required), `tabId` (string, optional) |
 | `browser_fill` | Type text into input/textarea | `selector` (string, required), `value` (string, required), `tabId` (optional) |
+| `browser_upload_file` | Set files on a file input (no OS dialog) | `files` (string or string[], required), `selector` (optional), `tabId` (optional) |
 | `browser_scroll` | Scroll page | `position` ("top" \| "bottom" \| "by"), `y` (int), `tabId` (optional) |
 | `browser_get_history` | Query recent navigation history | `limit` (int, optional) |
 | `browser_get_bookmarks` | Query bookmarks | None |

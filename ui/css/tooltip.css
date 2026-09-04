@@ -4,8 +4,8 @@
   max-width: 220px;
   padding: 0.35rem 0.55rem;
   border-radius: 8px;
-  background: #2c2b2c;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-hover);
+  border: 1px solid var(--stroke-01);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
   color: var(--text);
   font-family: var(--font);
@@ -39,8 +39,8 @@
   padding: 0;
   border-radius: 0;
   white-space: normal;
-  background: #292829;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-elevated);
+  border: 1px solid var(--stroke-01);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
   font-weight: 400;
   transform: translateY(4px);
@@ -63,7 +63,7 @@
 }
 
 .omni-tab-tip-title {
-  color: #f2f2f2;
+  color: var(--text);
   font-size: 0.78rem;
   font-weight: 600;
   letter-spacing: -0.015em;
@@ -73,7 +73,7 @@
 
 .omni-tab-tip-domain {
   margin-top: 0.2rem;
-  color: rgba(255, 255, 255, 0.52);
+  color: var(--muted);
   font-size: 0.7rem;
   font-weight: 450;
   letter-spacing: -0.01em;
@@ -82,7 +82,7 @@
 
 .omni-tab-tip-meta {
   padding: 0.55rem 0.85rem 0.7rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--stroke-01);
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
@@ -92,7 +92,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: rgba(255, 255, 255, 0.88);
+  color: var(--text);
   font-size: 0.7rem;
   font-weight: 450;
   letter-spacing: -0.01em;
@@ -103,5 +103,5 @@
   flex: 0 0 auto;
   width: 14px;
   height: 14px;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--muted);
 }

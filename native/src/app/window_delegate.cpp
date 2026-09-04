@@ -3,6 +3,7 @@
 #include "include/views/cef_box_layout.h"
 #include "include/views/cef_fill_layout.h"
 #include "include/views/cef_overlay_controller.h"
+#include "omni/appearance.h"
 #include "omni/omni_handler.h"
 
 #if defined(_WIN32)
@@ -102,10 +103,15 @@ void OmniWindowDelegate::OnWindowCreated(CefRefPtr<CefWindow> window) {
 
 #if defined(_WIN32)
   ApplyAppIcon(window);
+  HWND hwnd = window->GetWindowHandle();
+  ApplyNativeWindowAppearance(hwnd);
+  ApplyImmersiveMenuAppearance();
+  InstallSystemAppearanceListener(hwnd);
 #endif
   window->Show();
 
   if (auto* handler = OmniHandler::GetInstance()) {
+    ApplyChromeAppearance();
     handler->LayoutContentBrowser();
   }
 }

@@ -355,7 +355,7 @@
   function boot() {
     if (window.OmniOverlayManager) {
       OmniOverlayManager.register(OmniOverlayManager.PANEL_MEDIA, {
-        close: markClosed,
+        close: hideOverlay,
       });
     }
 
@@ -366,24 +366,31 @@
       }
       btn.setAttribute("aria-expanded", "false");
 
-      btn.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        if (wrap && wrap.hidden) {
-          return;
-        }
-        if (open) {
-          hideOverlay();
-          return;
-        }
-        if (
-          window.OmniOverlayManager &&
-          OmniOverlayManager.shouldSuppressOpen(OmniOverlayManager.PANEL_MEDIA)
-        ) {
-          return;
-        }
-        setOpen(true);
-      });
+      if (window.OmniOverlayManager && typeof OmniOverlayManager.bindToggle === "function") {
+        OmniOverlayManager.bindToggle(OmniOverlayManager.PANEL_MEDIA, btn, {
+          isOpen: () => open,
+          open: () => {
+            if (wrap && wrap.hidden) {
+              return;
+            }
+            setOpen(true);
+          },
+          close: hideOverlay,
+        });
+      } else {
+        btn.addEventListener("click", (event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          if (wrap && wrap.hidden) {
+            return;
+          }
+          if (open) {
+            hideOverlay();
+            return;
+          }
+          setOpen(true);
+        });
+      }
     }
 
     bindStartBarEvents();

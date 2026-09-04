@@ -9,6 +9,7 @@
 #include "include/views/cef_window.h"
 #include "include/wrapper/cef_helpers.h"
 #include "omni/adblock_service.h"
+#include "omni/appearance.h"
 #include "omni/dev_mode.h"
 #include "omni/mcp/mcp_server.h"
 #include "omni/omni_handler.h"
@@ -68,7 +69,11 @@ void OmniApp::OnContextInitialized() {
   CefBrowserSettings overlay_settings;
   // Windowed CEF browsers cannot composite true transparency (transparent
   // alpha clears to white). Match Brave: opaque menu surface, sized to fit.
-  overlay_settings.background_color = CefColorSetARGB(255, 0x2a, 0x29, 0x2a);
+  if (ChromeShouldUseDark()) {
+    overlay_settings.background_color = CefColorSetARGB(255, 0x2a, 0x29, 0x2a);
+  } else {
+    overlay_settings.background_color = CefColorSetARGB(255, 0xf3, 0xf2, 0xf3);
+  }
   CefRefPtr<CefBrowserView> overlay_view = CefBrowserView::CreateBrowserView(
       handler, paths::UiOverlayUrl(), overlay_settings, nullptr, nullptr,
       overlay_delegate);

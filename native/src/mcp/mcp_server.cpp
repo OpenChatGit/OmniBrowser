@@ -365,7 +365,8 @@ void McpServer::RegisterTools() {
 
   tools_["browser_eval_js"] = {
       "browser_eval_js",
-      "Execute arbitrary JavaScript in the page context and return the evaluated result.",
+      "Evaluate JavaScript in the page via the DevTools protocol (not subject "
+      "to page CSP / unsafe-eval). Returns the expression result.",
       {{"type", "object"},
        {"properties",
         {{"expression",
@@ -404,6 +405,31 @@ void McpServer::RegisterTools() {
           {{"type", "string"},
            {"description", "Optional tab ID (defaults to active tab)"}}}}},
        {"required", {"selector", "value"}}}};
+
+  tools_["browser_upload_file"] = {
+      "browser_upload_file",
+      "Set files on a file input without the native OS file dialog. Click the "
+      "upload control first (the chooser is intercepted), then call this with "
+      "absolute local paths. Optionally pass a CSS selector for an existing "
+      "<input type=file>. Uses CDP DOM.setFileInputFiles.",
+      {{"type", "object"},
+       {"properties",
+        {{"files",
+          {{"description",
+            "Absolute file path, or array of absolute paths"},
+           {"oneOf",
+            Json::array({Json{{"type", "string"}},
+                         Json{{"type", "array"},
+                              {"items", Json{{"type", "string"}}}}})}}},
+         {"selector",
+          {{"type", "string"},
+           {"description",
+            "Optional CSS selector for <input type=file>. If omitted, uses "
+            "the last intercepted file chooser or the last file input."}}},
+         {"tabId",
+          {{"type", "string"},
+           {"description", "Optional tab ID (defaults to active tab)"}}}}},
+       {"required", {"files"}}}};
 
   tools_["browser_scroll"] = {
       "browser_scroll",
@@ -825,6 +851,10 @@ Json McpServer::ToolFill(const Json& args) {
   return DispatchAndWait("page.fill", args, "Fill timed out");
 }
 
+Json McpServer::ToolUploadFile(const Json& args) {
+  return DispatchAndWait("page.setFiles", args, "File upload timed out");
+}
+
 Json McpServer::ToolScroll(const Json& args) {
   return DispatchAndWait("page.scroll", args, "Scroll timed out");
 }
@@ -1010,7 +1040,8 @@ Json McpServer::ExecuteTool(const std::string& name, const Json& args) {
       name == "browser_go_back" || name == "browser_go_forward" ||
       name == "browser_activate_tab" || name == "browser_close_tab" ||
       name == "browser_extract_content" || name == "browser_get_html" ||
-      name == "browser_eval_js" || name == "browser_wait_for_load";
+      name == "browser_eval_js" || name == "browser_wait_for_load" ||
+      name == "browser_upload_file";
   if (uses_page) {
     const int agent_count = std::max(1, leftover);
     RunOnUiAndWait([&]() {
@@ -1041,6 +1072,7 @@ Json McpServer::ExecuteTool(const std::string& name, const Json& args) {
   if (name == "browser_eval_js") return ToolEvalJs(args);
   if (name == "browser_click") return ToolClick(args);
   if (name == "browser_fill") return ToolFill(args);
+  if (name == "browser_upload_file") return ToolUploadFile(args);
   if (name == "browser_scroll") return ToolScroll(args);
   if (name == "browser_get_history") return ToolGetHistory(args);
   if (name == "browser_get_bookmarks") return ToolGetBookmarks(args);

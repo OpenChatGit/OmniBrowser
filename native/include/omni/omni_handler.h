@@ -125,6 +125,7 @@ class OmniHandler : public CefClient,
                    int anchor_bottom,
                    const Json& payload);
   void CancelAppMenu();
+  bool app_menu_open() const { return app_menu_open_; }
   void OnAppMenuClosed();
   void EmitMenuCommand(const Json& command);
   void ToggleDevTools();
@@ -273,6 +274,7 @@ class OmniHandler : public CefClient,
       const std::vector<CefDraggableRegion>& regions) override;
 
   void EmitBrowserEvent(const Json& event);
+  void NotifyAppearanceChanged();
   void EmitOverlayEvent(const Json& event);
 
  private:
@@ -293,6 +295,8 @@ class OmniHandler : public CefClient,
   void EmitContentEvent(CefRefPtr<CefBrowser> browser, Json event);
   void FlushPendingContentUrl(const std::string& tab_id);
   bool IsContentSeedIdle(CefRefPtr<CefBrowser> browser) const;
+  bool ContentViewIsBooting(CefRefPtr<CefBrowserView> view) const;
+  bool AnyContentViewBooting() const;
   void MarkContentSeedIdle(CefRefPtr<CefBrowser> browser);
   void ClearContentSeedIdle(CefRefPtr<CefBrowser> browser);
   void TrackBrowserIdentity(CefRefPtr<CefBrowser> browser);

@@ -119,11 +119,24 @@ bool PidIsOmniBrowser(DWORD pid) {
 struct FindGuiState {
   DWORD skip_pid = 0;
   DWORD found_pid = 0;
+  HWND found_hwnd = nullptr;
 };
 
 BOOL CALLBACK FindOmniGuiWindowProc(HWND hwnd, LPARAM lparam) {
   auto* state = reinterpret_cast<FindGuiState*>(lparam);
-  if (!IsWindowVisible(hwnd) || GetWindow(hwnd, GW_OWNER) != nullptr) {
+  if (GetWindow(hwnd, GW_OWNER) != nullptr) {
+    return TRUE;
+  }
+  const LONG ex = GetWindowLongW(hwnd, GWL_EXSTYLE);
+  if (ex & WS_EX_TOOLWINDOW) {
+    return TRUE;
+  }
+  if (!IsWindowVisible(hwnd) && !IsIconic(hwnd)) {
+    return TRUE;
+  }
+  RECT rc = {};
+  GetWindowRect(hwnd, &rc);
+  if ((rc.right - rc.left) < 80 || (rc.bottom - rc.top) < 80) {
     return TRUE;
   }
   DWORD pid = 0;
@@ -135,6 +148,7 @@ BOOL CALLBACK FindOmniGuiWindowProc(HWND hwnd, LPARAM lparam) {
     return TRUE;
   }
   state->found_pid = pid;
+  state->found_hwnd = hwnd;
   return FALSE;
 }
 
@@ -672,6 +686,75 @@ bool McpServer::IsHttpReachable(int port, int timeout_ms) {
     return true;
   }
   return GuiAlreadyOpen(nullptr);
+}
+
+bool McpServer::FocusExistingGuiWindow() {
+  HWND hwnd = nullptr;
+  DWORD pid = 0;
+  for (int i = 0; i < 50; ++i) {
+    FindGuiState state;
+    state.skip_pid = GetCurrentProcessId();
+    EnumWindows(FindOmniGuiWindowProc, reinterpret_cast<LPARAM>(&state));
+    if (state.found_hwnd) {
+      hwnd = state.found_hwnd;
+      pid = state.found_pid;
+      break;
+    }
+    Sleep(100);
+  }
+  if (!hwnd) {
+    Log("McpServer: no existing GUI window to focus");
+    return false;
+  }
+  if (IsIconic(hwnd)) {
+    ShowWindow(hwnd, SW_RESTORE);
+  } else {
+    ShowWindow(hwnd, SW_SHOW);
+  }
+  if (pid) {
+    AllowSetForegroundWindow(pid);
+  }
+  const HWND fg = GetForegroundWindow();
+  DWORD fg_tid = 0;
+  if (fg) {
+    fg_tid = GetWindowThreadProcessId(fg, nullptr);
+  }
+  const DWORD our_tid = GetCurrentThreadId();
+  if (fg_tid && fg_tid != our_tid) {
+    AttachThreadInput(our_tid, fg_tid, TRUE);
+  }
+  BringWindowToTop(hwnd);
+  SetForegroundWindow(hwnd);
+  if (fg_tid && fg_tid != our_tid) {
+    AttachThreadInput(our_tid, fg_tid, FALSE);
+  }
+  Log("McpServer: focused existing GUI hwnd pid=" + std::to_string(pid));
+  return true;
+}
+
+void McpServer::TerminateStaleGuiProcesses() {
+  const DWORD current_pid = GetCurrentProcessId();
+  HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (snapshot == INVALID_HANDLE_VALUE) {
+    return;
+  }
+  PROCESSENTRY32W entry = {};
+  entry.dwSize = sizeof(entry);
+  if (Process32FirstW(snapshot, &entry)) {
+    do {
+      if (entry.th32ProcessID != current_pid &&
+          PathIsOmniBrowserExe(entry.szExeFile)) {
+        HANDLE proc = OpenProcess(PROCESS_TERMINATE, FALSE, entry.th32ProcessID);
+        if (proc) {
+          Log("Terminating stale/headless OmniBrowser process pid=" +
+              std::to_string(entry.th32ProcessID));
+          TerminateProcess(proc, 0);
+          CloseHandle(proc);
+        }
+      }
+    } while (Process32NextW(snapshot, &entry));
+  }
+  CloseHandle(snapshot);
 }
 
 namespace {

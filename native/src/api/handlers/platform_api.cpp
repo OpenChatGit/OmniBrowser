@@ -1,6 +1,7 @@
 #include "omni/api/register_apis.h"
 
 #include "omni/api/api_dispatcher.h"
+#include "omni/appearance.h"
 #include "omni/omni_handler.h"
 #include "omni/plugin_registry.h"
 #include "omni/session_store.h"
@@ -41,6 +42,15 @@ void RegisterPlatformApis() {
               Json{{"ok", true}, {"settings", settings::GetAll()}}.dump());
           return;
         }
+        if (key == "appearance") {
+          responder.Success(
+              Json{{"ok", true},
+                   {"key", key},
+                   {"value", AppearancePreference()},
+                   {"theme", ChromeShouldUseDark() ? "dark" : "light"}}
+                  .dump());
+          return;
+        }
         responder.Success(
             Json{{"ok", true}, {"key", key}, {"value", settings::Get(key)}}
                 .dump());
@@ -56,6 +66,9 @@ void RegisterPlatformApis() {
         }
         if (params.contains("settings") && params["settings"].is_object()) {
           const bool ok = settings::SetMany(params["settings"]);
+          if (ok && params["settings"].contains("appearance")) {
+            ApplyChromeAppearance();
+          }
           responder.Success(Json{{"ok", ok}}.dump());
           return;
         }
@@ -65,6 +78,9 @@ void RegisterPlatformApis() {
           return;
         }
         const bool ok = settings::Set(key, params["value"]);
+        if (ok && key == "appearance") {
+          ApplyChromeAppearance();
+        }
         responder.Success(Json{{"ok", ok}, {"key", key}}.dump());
       },
       ApiExposure::UiOnly);

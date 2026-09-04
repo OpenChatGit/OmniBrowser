@@ -12,6 +12,21 @@
         document.documentElement.dataset.private = "1";
         document.title = "Omni Private";
       }
+      var KEY = "omni.appearance";
+      var pref = "system";
+      var cachedTheme = "";
+      try {
+        pref = localStorage.getItem(KEY) || "system";
+        cachedTheme = localStorage.getItem(KEY + ".theme") || "";
+      } catch (e) {}
+      if (pref !== "light" && pref !== "dark") pref = "system";
+      var dark = !window.matchMedia || window.matchMedia("(prefers-color-scheme: dark)").matches;
+      var theme = pref === "light" ? "light" : pref === "dark" ? "dark"
+        : (cachedTheme === "light" || cachedTheme === "dark") ? cachedTheme
+        : (dark ? "dark" : "light");
+      if (privateMode) theme = "dark";
+      document.documentElement.setAttribute("data-theme", theme);
+      document.documentElement.style.colorScheme = theme;
     })();
   </script>
   <link rel="stylesheet" href="css/tokens.css" />
@@ -295,6 +310,7 @@
   <script src="js/lib/tooltip.js"></script>
   <script src="js/lib/overlay-manager.js"></script>
   <script src="js/bridge.js"></script>
+  <script src="js/lib/theme.js"></script>
   <script src="js/features/shell/window-icons.js"></script>
   <script src="js/features/shell/titlebar.js"></script>
   <script src="js/features/browser/url.js"></script>

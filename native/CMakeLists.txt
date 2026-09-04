@@ -71,6 +71,7 @@ set(OMNI_SRCS
   src/api/handlers/terminal_api.cpp
   src/api/handlers/git_api.cpp
   src/api/handlers/agent_api.cpp
+  src/api/devtools_client.cpp
   src/ipc/library_ipc.cpp
   src/ipc/library_commands.cpp
   src/ipc/library_json.cpp
@@ -91,6 +92,7 @@ set(OMNI_SRCS
   src/platform/paths.cpp
   src/platform/file_dialog.cpp
   src/platform/utf8.cpp
+  src/platform/appearance.cpp
   src/dev/dev_mode.cpp
   src/dev/ui_hot_reload.cpp
   src/mcp/mcp_server.cpp
@@ -128,6 +130,7 @@ target_link_libraries(${OMNI_TARGET}
   omni_adblock_ffi
   ${CEF_STANDARD_LIBS}
   comdlg32
+  comctl32
   winhttp
   ws2_32
   userenv
@@ -161,3 +164,12 @@ add_custom_command(TARGET ${OMNI_TARGET} POST_BUILD
 set_target_properties(${OMNI_TARGET} PROPERTIES
   VS_DEBUGGER_WORKING_DIRECTORY "${CEF_TARGET_OUT_DIR}"
 )
+
+if(MSVC)
+  # Release PDBs so fail-fast dumps (0xC0000409) can be decoded in WinDbg/VS.
+  target_link_options(${OMNI_TARGET} PRIVATE
+    $<$<CONFIG:Release>:/DEBUG:FULL>
+    $<$<CONFIG:Release>:/OPT:REF>
+    $<$<CONFIG:Release>:/OPT:ICF>
+  )
+endif()

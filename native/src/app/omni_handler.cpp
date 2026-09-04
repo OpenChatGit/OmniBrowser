@@ -21,11 +21,13 @@
 #include "omni/adblock_resource_handler.h"
 #include "omni/agent_api.h"
 #include "omni/ai_hud.h"
+#include "omni/appearance.h"
 #include "omni/log.h"
 #include "omni/adblock_service.h"
 #include "omni/app_menu_button.h"
 #include "omni/dev_mode.h"
 #include "omni/download_store.h"
+#include "omni/devtools_client.h"
 #include "omni/library_ipc.h"
 #include "omni/mcp/mcp_server.h"
 #include "omni/paths.h"
@@ -393,6 +395,31 @@ void OmniHandler::ClearContentSeedIdle(CefRefPtr<CefBrowser> browser) {
   }
 }
 
+bool OmniHandler::ContentViewIsBooting(CefRefPtr<CefBrowserView> view) const {
+  if (!view) {
+    return false;
+  }
+  auto browser = view->GetBrowser();
+  if (!browser) {
+    return true;
+  }
+  return !IsContentSeedIdle(browser);
+}
+
+bool OmniHandler::AnyContentViewBooting() const {
+  for (const auto& entry : tab_content_views_) {
+    if (ContentViewIsBooting(entry.second)) {
+      return true;
+    }
+  }
+  for (const auto& view : recycled_content_views_) {
+    if (ContentViewIsBooting(view)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 bool OmniHandler::EnsureContentTab(const std::string& tab_id) {
   CEF_REQUIRE_UI_THREAD();
   if (tab_id.empty()) {
@@ -429,6 +456,24 @@ bool OmniHandler::EnsureContentTab(const std::string& tab_id) {
     }
     omni::Log("EnsureContentTab: reuse view for " + tab_id);
   } else {
+    if (AnyContentViewBooting()) {
+      omni::Log("EnsureContentTab: defer new Alloy view for " + tab_id +
+                " (another content seed still attaching)");
+      const std::string tab_copy = tab_id;
+      CefPostDelayedTask(
+          TID_UI,
+          base::BindOnce(
+              [](std::string id) {
+                if (auto* handler = OmniHandler::GetInstance()) {
+                  if (handler->EnsureContentTab(id)) {
+                    handler->FlushPendingContentUrl(id);
+                  }
+                }
+              },
+              tab_copy),
+          250);
+      return false;
+    }
     if (!shell_browser_view_) {
       return false;
     }
@@ -573,7 +618,12 @@ bool OmniHandler::ContentNavigate(const std::string& url,
     return false;
   }
   if (!EnsureContentTab(id)) {
-    return false;
+    if (!shell_browser_view_ || tab_content_views_.size() >= kMaxContentTabs) {
+      return false;
+    }
+    pending_content_urls_[id] = url;
+    omni::Log("ContentNavigate: waiting for view " + url + " tab=" + id);
+    return true;
   }
   if (active_tab_id_ != id) {
     active_tab_id_ = id;
@@ -963,18 +1013,17 @@ void OmniHandler::ShowAppMenu(int anchor_left,
   if (!shell_browser_view_) {
     return;
   }
-  auto window = shell_browser_view_->GetWindow();
-  if (!window) {
+  if (!shell_browser_view_->GetWindow()) {
     return;
   }
 
-  // Tip overlay and native menu must not stack.
-  OverlayHide();
-  if (app_menu_open_) {
+  // Cancel any previous menu so CEF never stays in a stale menu-running state
+  if (auto window = shell_browser_view_->GetWindow()) {
     window->CancelMenu();
-    app_menu_open_ = false;
-    app_menu_ = nullptr;
   }
+  OverlayHide();
+  app_menu_open_ = false;
+  app_menu_ = nullptr;
 
   app_menu_ = new AppMenuDelegate(this, payload);
   CefRefPtr<CefMenuModel> model = app_menu_->Build();
@@ -997,15 +1046,13 @@ void OmniHandler::ShowAppMenu(int anchor_left,
   const int top = anchor_top;
   const int right = anchor_right > left ? anchor_right : left;
   const int bottom = anchor_bottom > top ? anchor_bottom : top;
-  const int width = std::max(1, right - left);
-  const int height = std::max(1, bottom - top);
 
   app_menu_btn_right_ = right;
   app_menu_btn_bottom_ = bottom;
 
   if (app_menu_button_controller_) {
-    app_menu_button_controller_->SetBounds(CefRect(left, top, width, height));
-    app_menu_button_controller_->SetVisible(false);
+    app_menu_button_controller_->SetBounds(CefRect(0, 0, 1, 1));
+    app_menu_button_controller_->SetVisible(true);
   }
 
   CefPoint screen_point(right, bottom);
@@ -1016,6 +1063,16 @@ void OmniHandler::ShowAppMenu(int anchor_left,
   }
 
   app_menu_open_ = true;
+#if defined(_WIN32)
+  ApplyImmersiveMenuAppearance();
+  HWND main_hwnd = nullptr;
+  if (shell_browser_view_) {
+    if (auto window = shell_browser_view_->GetWindow()) {
+      main_hwnd = window->GetWindowHandle();
+    }
+  }
+  InstallAppMenuSubmenuHook(main_hwnd);
+#endif
   // Must go through MenuButton::ShowMenu (not Window::ShowMenu) so CEF uses
   // HAS_MNEMONICS instead of CONTEXT_MENU — otherwise Windows flips the menu
   // open to the right past the window edge.
@@ -1036,6 +1093,13 @@ void OmniHandler::OnAppMenuClosed() {
   CEF_REQUIRE_UI_THREAD();
   app_menu_open_ = false;
   app_menu_ = nullptr;
+#if defined(_WIN32)
+  RemoveAppMenuSubmenuHook();
+#endif
+  if (app_menu_button_controller_) {
+    app_menu_button_controller_->SetBounds(CefRect(0, 0, 1, 1));
+    app_menu_button_controller_->SetVisible(false);
+  }
   EmitBrowserEvent(Json{{"type", "menu"}, {"visible", false}});
 }
 
@@ -1880,6 +1944,38 @@ void OmniHandler::EmitBrowserEvent(const Json& event) {
   }
 }
 
+void OmniHandler::NotifyAppearanceChanged() {
+  const bool dark = ChromeShouldUseDark();
+  const std::string theme = dark ? "dark" : "light";
+  const std::string pref = AppearancePreference();
+  EmitBrowserEvent(Json{{"type", "appearance.changed"},
+                        {"preference", pref},
+                        {"theme", theme}});
+  const std::string js =
+      "(function(){var t='" + theme + "';var p='" + pref +
+      "';if(window.OmniTheme&&typeof OmniTheme.applyExternal==='function'){"
+      "OmniTheme.applyExternal(p,t);return;}"
+      "document.documentElement.setAttribute('data-theme',t);"
+      "document.documentElement.style.colorScheme=t;"
+      "try{localStorage.setItem('omni.appearance',p);}catch(e){}"
+      "window.dispatchEvent(new CustomEvent('omni-theme-change',"
+      "{detail:{preference:p,theme:t}}));})();";
+  for (auto& browser : browsers_) {
+    if (!browser) {
+      continue;
+    }
+    CefRefPtr<CefFrame> frame = browser->GetMainFrame();
+    if (!frame || !frame->IsValid()) {
+      continue;
+    }
+    const std::string url = frame->GetURL().ToString();
+    if (url.rfind("file:", 0) != 0) {
+      continue;
+    }
+    frame->ExecuteJavaScript(js, frame->GetURL(), 0);
+  }
+}
+
 void OmniHandler::EmitContentEvent(CefRefPtr<CefBrowser> browser, Json event) {
   if (browser &&
       recycling_content_browser_ids_.count(browser->GetIdentifier()) > 0) {
@@ -2061,6 +2157,7 @@ void OmniHandler::OnLoadEnd(CefRefPtr<CefBrowser> browser,
   FlushPendingContentUrl(tab_id);
   InjectScrollbarStyles(frame);
   InjectAdblockObservers(frame);
+  DevToolsClient::Get().Attach(browser);
 }
 
 void OmniHandler::OnAfterCreated(CefRefPtr<CefBrowser> browser) {
@@ -2126,6 +2223,7 @@ void OmniHandler::OnBeforeClose(CefRefPtr<CefBrowser> browser) {
   }
 
   UntrackBrowserIdentity(browser);
+  DetachAgentDevTools(browser->GetIdentifier());
 
   for (auto it = browsers_.begin(); it != browsers_.end(); ++it) {
     if ((*it)->IsSame(browser)) {

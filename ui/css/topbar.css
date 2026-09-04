@@ -8,7 +8,7 @@
   justify-content: space-between;
   padding: 0 0.85rem;
   background: var(--bg-titlebar);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--stroke-01);
   -webkit-app-region: no-drag;
   min-width: 0;
   overflow: visible;
@@ -74,7 +74,7 @@
 }
 
 .topbar-download-track {
-  stroke: rgba(255, 255, 255, 0.14);
+  stroke: var(--stroke-02);
 }
 
 .topbar-download-progress {
@@ -140,7 +140,7 @@
 }
 
 .topbar-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--fill-02);
   color: var(--text);
 }
 
@@ -201,15 +201,16 @@
   min-height: 32px;
   padding: 0 0.3rem 0 0.75rem;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--fill-01);
+  border: 1px solid var(--stroke-01);
+  color-scheme: inherit;
   transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease;
 }
 
 .topbar-search:focus-within {
-  border-color: rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.07);
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.04);
+  border-color: var(--stroke-02);
+  background: var(--fill-02);
+  box-shadow: 0 0 0 3px var(--fill-01);
 }
 
 .topbar-search-icon {
@@ -261,7 +262,7 @@
   width: 1px;
   height: 16px;
   margin: 0 0.05rem;
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--fill-04);
 }
 
 .topbar-search .topbar-adblock {
@@ -277,5 +278,5 @@
 }
 
 .topbar-search .topbar-adblock:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--fill-02);
 }

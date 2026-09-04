@@ -1,5 +1,6 @@
 (() => {
   document.addEventListener("DOMContentLoaded", () => {
+    try { OmniTheme.boot(); } catch (e) { console.error("OmniTheme error:", e); }
     try { OmniIcons.refresh(); } catch (e) { console.error("OmniIcons error:", e); }
     try { OmniTooltip.bootTooltips(); } catch (e) { console.error("OmniTooltip error:", e); }
     try { OmniTitlebar.bootTitlebar(); } catch (e) { console.error("OmniTitlebar error:", e); }

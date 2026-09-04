@@ -9,8 +9,8 @@
   padding: 0.28rem 0.55rem;
   border: 0;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #f0f0f0;
+  background: var(--fill-02);
+  color: var(--text);
   font: inherit;
   font-size: 0.78rem;
   font-weight: 500;
@@ -26,12 +26,12 @@
 
 .qb-perm-chip:hover,
 .qb-perm-chip.is-active {
-  background: rgba(255, 255, 255, 0.14);
+  background: var(--fill-03);
 }
 
 .qb-perm-chip svg {
   flex-shrink: 0;
-  color: #e8e8e8;
+  color: var(--text);
 }
 
 .qb-perm-chip-text {
@@ -63,10 +63,10 @@
 .qb-perm-card {
   width: min(360px, calc(100vw - 1.5rem));
   border-radius: 14px;
-  background: #2b2b2d;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-elevated);
+  border: 1px solid var(--stroke-01);
   box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
-  color: #e8e8e8;
+  color: var(--text);
   overflow: hidden;
   font-family: var(--font, system-ui, sans-serif);
 }
@@ -81,13 +81,13 @@
 .qb-perm-asking {
   flex: 1 1 auto;
   margin: 0;
-  color: #b8b8b8;
+  color: var(--muted);
   font-size: 0.8rem;
   line-height: 1.35;
 }
 
 .qb-perm-asking strong {
-  color: #f0f0f0;
+  color: var(--text);
   font-weight: 600;
 }
 
@@ -99,7 +99,7 @@
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #aaa;
+  color: var(--muted);
   font-size: 1.25rem;
   line-height: 1;
   cursor: pointer;
@@ -107,8 +107,8 @@
 }
 
 .qb-perm-x:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: var(--fill-02);
+  color: var(--text);
 }
 
 .qb-perm-body {
@@ -124,14 +124,14 @@
 
 .qb-perm-icon {
   display: inline-flex;
-  color: #cfcfcf;
+  color: var(--muted);
 }
 
 .qb-perm-title {
   font-size: 0.95rem;
   font-weight: 650;
   letter-spacing: -0.02em;
-  color: #f5f5f5;
+  color: var(--text);
 }
 
 .qb-perm-remember {
@@ -143,7 +143,7 @@
 }
 
 .qb-perm-remember-label {
-  color: #cfcfcf;
+  color: var(--muted);
   font-size: 0.8rem;
 }
 
@@ -153,12 +153,12 @@
   max-width: 58%;
   padding: 0.35rem 1.6rem 0.35rem 0.55rem;
   border-radius: 8px;
-  border: 1px solid #4a4a4a;
+  border: 1px solid var(--stroke);
   background:
-    linear-gradient(45deg, transparent 50%, #bbb 50%) no-repeat right 10px center / 5px 5px,
-    linear-gradient(135deg, #bbb 50%, transparent 50%) no-repeat right 6px center / 5px 5px,
-    #3a3a3c;
-  color: #f0f0f0;
+    linear-gradient(45deg, transparent 50%, var(--muted) 50%) no-repeat right 10px center / 5px 5px,
+    linear-gradient(135deg, var(--muted) 50%, transparent 50%) no-repeat right 6px center / 5px 5px,
+    var(--bg-hover);
+  color: var(--text);
   font: inherit;
   font-size: 0.78rem;
   cursor: pointer;
@@ -169,7 +169,7 @@
   align-items: flex-start;
   gap: 0.45rem;
   margin: 0 0 1rem;
-  color: #d8d8d8;
+  color: var(--text);
   font-size: 0.76rem;
   line-height: 1.4;
 }
@@ -189,7 +189,7 @@
 }
 
 .qb-perm-link {
-  color: #8ab4f8;
+  color: var(--accent);
   text-decoration: none;
 }
 
@@ -208,9 +208,9 @@
   min-width: 72px;
   padding: 0.42rem 0.9rem;
   border-radius: 999px;
-  border: 1px solid #4a4a4a;
-  background: #3a3a3c;
-  color: #f2f2f2;
+  border: 1px solid var(--stroke);
+  background: var(--bg-hover);
+  color: var(--text);
   font: inherit;
   font-size: 0.82rem;
   font-weight: 550;
@@ -218,7 +218,7 @@
 }
 
 .qb-perm-btn:hover {
-  background: #454548;
+  background: var(--bg-hover);
 }
 
 .qb-perm-btn-allow {
@@ -228,9 +228,9 @@
 
 .qb-perm-foot {
   padding: 0.7rem 1rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--stroke-01);
   background: rgba(0, 0, 0, 0.18);
-  color: #9a9a9a;
+  color: var(--muted);
   font-size: 0.72rem;
   line-height: 1.4;
 }

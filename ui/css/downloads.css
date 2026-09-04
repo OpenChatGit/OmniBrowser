@@ -1,5 +1,5 @@
 :root {
-  color-scheme: dark;
+  color-scheme: dark light;
 }
 
 * {
@@ -12,7 +12,7 @@ body {
   min-height: 100%;
   background:
     radial-gradient(1200px 600px at 50% -10%, rgba(102, 192, 244, 0.06), transparent 55%),
-    linear-gradient(180deg, #161516 0%, var(--bg-deep) 48%, #101010 100%);
+    var(--page-wash);
   color: var(--text);
   font-family: var(--font);
 }
@@ -90,7 +90,7 @@ body {
 
 .hist-nav.is-active {
   border-color: var(--stroke);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--fill-01);
   color: var(--text);
 }
 
@@ -123,7 +123,7 @@ body {
   padding: 0 12px;
   border: 1px solid var(--stroke);
   border-radius: 10px;
-  background: rgba(36, 35, 36, 0.9);
+  background: var(--bg-elevated);
 }
 
 .hist-search-icon {
@@ -214,6 +214,11 @@ body {
   mix-blend-mode: lighten;
 }
 
+html[data-theme="light"] .hist-favicon,
+html[data-theme="light"] .hist-site-icon img {
+  mix-blend-mode: normal;
+}
+
 .hist-site-icon.is-fallback {
   background: transparent !important;
 }
@@ -244,7 +249,7 @@ body {
 }
 
 .hist-file-icon.is-video {
-  color: #8ab4f8;
+  color: var(--accent);
 }
 
 .hist-file-icon.is-audio {
@@ -264,11 +269,11 @@ body {
 }
 
 .hist-file-icon.is-code {
-  color: #66c0f4;
+  color: var(--accent);
 }
 
 .hist-file-icon.is-doc {
-  color: #9aa0a6;
+  color: var(--muted);
 }
 
 .hist-copy {

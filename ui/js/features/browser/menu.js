@@ -13,6 +13,7 @@
       typeof window.cefQuery === "function";
 
     let menuOpen = false;
+    let lastDismissTime = 0;
 
     function openMenu() {
       if (!hasNative) {
@@ -36,10 +37,8 @@
     }
 
     function closeMenu() {
-      if (!menuOpen) {
-        return;
-      }
       menuOpen = false;
+      lastDismissTime = Date.now();
       btn.setAttribute("aria-expanded", "false");
       if (window.OmniOverlayManager) {
         OmniOverlayManager.markClosed(OmniOverlayManager.PANEL_MENU);
@@ -174,6 +173,23 @@
       }
     }
 
+    btn.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        if (menuOpen) {
+          closeMenu();
+        } else {
+          openMenu();
+        }
+      }
+    });
+
+    if (window.OmniOverlayManager && typeof OmniOverlayManager.register === "function") {
+      OmniOverlayManager.register(OmniOverlayManager.PANEL_MENU, {
+        close: closeMenu,
+      });
+    }
+
     btn.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
@@ -181,10 +197,8 @@
         closeMenu();
         return;
       }
-      if (
-        window.OmniOverlayManager &&
-        OmniOverlayManager.shouldSuppressOpen(OmniOverlayManager.PANEL_MENU)
-      ) {
+      // If a native dismiss happened within the last 150ms (e.g. user clicked this button while menu was open)
+      if (Date.now() - lastDismissTime < 150) {
         return;
       }
       openMenu();
@@ -197,32 +211,23 @@
       }
     });
 
-    window.addEventListener("resize", closeMenu);
-
     if (hasNative && typeof OmniBridge.browserSubscribe === "function") {
       OmniBridge.browserSubscribe((msg, err) => {
         if (err || !msg) {
           return;
         }
         if (msg.type === "menu" && msg.visible === false) {
-          if (menuOpen) {
-            menuOpen = false;
-            btn.setAttribute("aria-expanded", "false");
-            if (window.OmniOverlayManager) {
-              OmniOverlayManager.onNativeDismiss(OmniOverlayManager.PANEL_MENU);
-            }
+          menuOpen = false;
+          lastDismissTime = Date.now();
+          btn.setAttribute("aria-expanded", "false");
+          if (window.OmniOverlayManager) {
+            OmniOverlayManager.markClosed(OmniOverlayManager.PANEL_MENU);
           }
         }
         if (msg.type === "menu-command") {
           runCommand(msg.command);
         }
       }).catch(() => {});
-    }
-
-    if (window.OmniOverlayManager) {
-      OmniOverlayManager.register(OmniOverlayManager.PANEL_MENU, {
-        close: closeMenu,
-      });
     }
   }
 

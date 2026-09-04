@@ -64,6 +64,15 @@ void ApplyProfileInstanceFromCommandLine() {
   }
 }
 
+std::wstring GuiMutexNameForProfile() {
+  const std::string id = omni::paths::ProfileInstanceId();
+  if (id.empty()) {
+    return omni::McpServer::kGuiMutexName;
+  }
+  return std::wstring(omni::McpServer::kGuiMutexName) + L"." +
+         omni::utf8::Widen(id);
+}
+
 int ParseMcpPort(CefRefPtr<CefCommandLine> command_line) {
   int port = 8999;
   if (command_line && command_line->HasSwitch("mcp-port")) {
@@ -109,15 +118,29 @@ int RunMain(HINSTANCE hInstance, void* sandbox_info) {
     return omni::McpServer::RunStdioHost(mcp_port);
   }
 
-  HANDLE gui_mutex = CreateMutexW(nullptr, TRUE, omni::McpServer::kGuiMutexName);
-  if (gui_mutex && GetLastError() == ERROR_ALREADY_EXISTS) {
-    omni::Log("OmniBrowser GUI already running");
+  // Profile (and therefore the Chromium singleton path) must be known
+  // before we take the instance mutex. Private windows get their own
+  // cache + mutex so they can coexist with the main GUI.
+  ApplyProfileInstanceFromCommandLine();
+
+  const std::wstring mutex_name = GuiMutexNameForProfile();
+  HANDLE gui_mutex = CreateMutexW(nullptr, TRUE, mutex_name.c_str());
+  const DWORD mutex_err = GetLastError();
+  if (gui_mutex && mutex_err == ERROR_ALREADY_EXISTS) {
+    omni::Log("OmniBrowser GUI already running — focusing existing window");
+    if (omni::McpServer::FocusExistingGuiWindow()) {
+      CloseHandle(gui_mutex);
+      return 0;
+    }
+    omni::Log("GUI mutex held but no visible window found — cleaning up stale/headless instance");
     CloseHandle(gui_mutex);
     gui_mutex = nullptr;
+    omni::McpServer::TerminateStaleGuiProcesses();
+    ::Sleep(300);
+    gui_mutex = CreateMutexW(nullptr, TRUE, mutex_name.c_str());
   }
 
   omni::Log("Main browser process initializing");
-  ApplyProfileInstanceFromCommandLine();
 
   CefSettings settings;
   settings.no_sandbox = true;
@@ -133,21 +156,12 @@ int RunMain(HINSTANCE hInstance, void* sandbox_info) {
   }
 
   if (!CefInitialize(main_args, settings, app.get(), sandbox_info)) {
-    omni::Log("CefInitialize failed — looking for already-running instance");
-    for (int i = 0; i < 40; ++i) {
-      if (omni::McpServer::IsHttpReachable(mcp_port, 250)) {
-        omni::Log("Existing OmniBrowser MCP is reachable; exiting duplicate");
-        if (gui_mutex) {
-          CloseHandle(gui_mutex);
-        }
-        return 0;
-      }
-      ::Sleep(150);
-    }
+    omni::Log("CefInitialize failed — focusing already-running instance");
+    omni::McpServer::FocusExistingGuiWindow();
     if (gui_mutex) {
       CloseHandle(gui_mutex);
     }
-    return CefGetExitCode();
+    return 0;
   }
 
   omni::Log("CefInitialize succeeded. Entering message loop.");

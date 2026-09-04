@@ -21,6 +21,13 @@
   } = window.OmniBrowserUrl;
 
   const NEW_TAB_FAVICON = "assets/QuBrain-new/q-white.svg";
+
+  function newTabFavicon() {
+    if (window.OmniTheme && typeof OmniTheme.brandMark === "function") {
+      return OmniTheme.brandMark();
+    }
+    return NEW_TAB_FAVICON;
+  }
   const SESSION_KEY = "omni.browser.session";
   const SESSION_VERSION = 1;
   const HISTORY_KEY = "omni.browser.history";
@@ -864,16 +871,22 @@
     }
 
     function closeEngineMenu() {
-      if (!engineBtn || !engineMenu || engineMenu.hidden) {
+      if (!engineBtn || !engineMenu) {
         return;
       }
       engineMenu.hidden = true;
       engineBtn.setAttribute("aria-expanded", "false");
+      if (window.OmniOverlayManager) {
+        OmniOverlayManager.markClosed(OmniOverlayManager.PANEL_ENGINE);
+      }
     }
 
     function openEngineMenu() {
       if (!engineBtn || !engineMenu) {
         return;
+      }
+      if (window.OmniOverlayManager) {
+        OmniOverlayManager.prepareOpen(OmniOverlayManager.PANEL_ENGINE);
       }
       if (window.OmniTooltip && typeof OmniTooltip.hide === "function") {
         OmniTooltip.hide();
@@ -964,24 +977,40 @@
       }
       renderEngineMenu();
 
-      function toggleEngineMenu(event) {
-        event.preventDefault();
-        event.stopPropagation();
-        if (engineMenu.hidden) {
-          openEngineMenu();
-        } else {
-          closeEngineMenu();
+      if (window.OmniOverlayManager && typeof OmniOverlayManager.bindToggle === "function") {
+        OmniOverlayManager.register(OmniOverlayManager.PANEL_ENGINE, {
+          close: closeEngineMenu,
+        });
+        OmniOverlayManager.bindToggle(OmniOverlayManager.PANEL_ENGINE, engineBtn, {
+          isOpen: () => Boolean(engineMenu && !engineMenu.hidden),
+          open: openEngineMenu,
+          close: closeEngineMenu,
+        });
+      } else {
+        function toggleEngineMenu(event) {
+          event.preventDefault();
+          event.stopPropagation();
+          if (engineMenu.hidden) {
+            openEngineMenu();
+          } else {
+            closeEngineMenu();
+          }
         }
+        engineBtn.addEventListener("click", toggleEngineMenu);
       }
 
-      engineBtn.addEventListener("click", toggleEngineMenu);
       engineBtn.addEventListener("keydown", (event) => {
         if (event.key === "Enter" || event.key === " ") {
-          toggleEngineMenu(event);
+          event.preventDefault();
+          if (engineMenu.hidden) {
+            openEngineMenu();
+          } else {
+            closeEngineMenu();
+          }
         }
       });
 
-      document.addEventListener("mousedown", (event) => {
+      document.addEventListener("pointerdown", (event) => {
         if (engineMenu.hidden) {
           return;
         }
@@ -1022,7 +1051,7 @@
       const tab = activeTab();
       const url = tab && tab.index >= 0 ? tab.history[tab.index] : "";
       const useBrand = !tab || isStartTab(tab) || isBrowserOwnedUrl(url);
-      const src = useBrand ? NEW_TAB_FAVICON : getSearchEngine().icon;
+      const src = useBrand ? newTabFavicon() : getSearchEngine().icon;
       const nextSrc = new URL(src, window.location.href).href;
       if (searchMark.src !== nextSrc) {
         searchMark.src = src;
@@ -1169,12 +1198,12 @@
       try {
         const parsed = new URL(url);
         if (parsed.protocol === "file:") {
-          return [NEW_TAB_FAVICON];
+          return [newTabFavicon()];
         }
         const host = parsed.hostname;
         const bare = host.replace(/^www\./, "");
         if (!bare) {
-          return [NEW_TAB_FAVICON];
+          return [newTabFavicon()];
         }
         return [
           `https://www.google.com/s2/favicons?domain=${encodeURIComponent(bare)}&sz=64`,
@@ -1182,13 +1211,13 @@
           `https://icons.duckduckgo.com/ip3/${bare}.ico`,
         ];
       } catch (_) {
-        return [NEW_TAB_FAVICON];
+        return [newTabFavicon()];
       }
     }
 
     function bindTabFavicon(img, tab) {
       if (tabShowsBrandIcon(tab)) {
-        img.src = NEW_TAB_FAVICON;
+        img.src = newTabFavicon();
         img.removeAttribute("hidden");
         return;
       }
@@ -1201,7 +1230,7 @@
       const tryNext = () => {
         if (index >= sources.length) {
           img.removeEventListener("error", tryNext);
-          img.src = NEW_TAB_FAVICON;
+          img.src = newTabFavicon();
           return;
         }
         img.src = sources[index];
@@ -1994,15 +2023,14 @@
       if (!hasNative || typeof OmniBridge.browserEnsureTab !== "function") {
         return;
       }
-      // Start-page tabs have no content URL. Creating a CEF view for them at
-      // boot, then closing the extra New Tab, recycles a still-booting Alloy
-      // browser and crashes when Wikipedia (or any restored page) navigates.
-      for (const tab of tabs) {
-        if (isStartTab(tab)) {
-          continue;
-        }
-        OmniBridge.browserEnsureTab(tab.id).catch(() => {});
+      // Only the active tab gets a CEF view at restore. Creating a second
+      // Alloy content view while the seed about:blank is still attaching
+      // CHECKs the browser process (Bing/Wikipedia session restore).
+      const tab = activeTab();
+      if (!tab || isStartTab(tab)) {
+        return;
       }
+      OmniBridge.browserEnsureTab(tab.id).catch(() => {});
     }
 
     function applyActiveTab() {
@@ -2913,6 +2941,10 @@
     bindUiEvents();
     syncChromeHeight();
     bindNativeEvents();
+    window.addEventListener("omni-theme-change", () => {
+      syncSearchBarIcon();
+      renderTabs();
+    });
     migrateVisitHistoryToNative();
     migrateBookmarksToNative();
     pullVisitHistoryFromNative();

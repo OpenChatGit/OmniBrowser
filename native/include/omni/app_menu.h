@@ -35,4 +35,10 @@ class AppMenuDelegate : public CefMenuModelDelegate {
   IMPLEMENT_REFCOUNTING(AppMenuDelegate);
 };
 
+#if defined(_WIN32)
+#include <windows.h>
+void InstallAppMenuSubmenuHook(HWND main_hwnd = nullptr);
+void RemoveAppMenuSubmenuHook();
+#endif
+
 }  // namespace omni
