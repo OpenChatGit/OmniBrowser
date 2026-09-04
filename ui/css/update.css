@@ -1,0 +1,310 @@
+/* OmniBrowser - Update Checker & Notification Flyout */
+
+.topbar-update-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  z-index: 200;
+}
+
+.topbar-update-wrap[hidden] {
+  display: none !important;
+}
+
+.topbar-btn-update {
+  position: relative;
+  height: 28px;
+  width: auto;
+  min-width: 0;
+  padding: 0 9px;
+  gap: 6px;
+  border-radius: 6px;
+  background: rgba(46, 204, 113, 0.12);
+  border: 1px solid rgba(46, 204, 113, 0.32);
+  color: #2ecc71;
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, box-shadow 150ms ease, color 150ms ease;
+  user-select: none;
+}
+
+html[data-theme="light"] .topbar-btn-update {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.38);
+  color: #059669;
+}
+
+.topbar-btn-update:hover:not(:disabled) {
+  background: rgba(46, 204, 113, 0.22);
+  border-color: rgba(46, 204, 113, 0.55);
+  box-shadow: 0 0 10px rgba(46, 204, 113, 0.28);
+  color: #38e384;
+}
+
+html[data-theme="light"] .topbar-btn-update:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.18);
+  border-color: rgba(16, 185, 129, 0.6);
+  color: #047857;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+}
+
+.topbar-btn-update.is-open {
+  background: rgba(46, 204, 113, 0.26);
+  border-color: rgba(46, 204, 113, 0.6);
+}
+
+.topbar-update-inner {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  line-height: 1;
+}
+
+.topbar-update-icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.2px;
+  display: block;
+}
+
+.topbar-update-label {
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.topbar-update-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2ecc71;
+  box-shadow: 0 0 6px #2ecc71;
+  animation: updateDotPulse 2.2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+  pointer-events: none;
+}
+
+html[data-theme="light"] .topbar-update-dot {
+  background: #059669;
+  box-shadow: 0 0 6px #059669;
+}
+
+@keyframes updateDotPulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 0.55;
+  }
+}
+
+/* Update Flyout */
+.update-flyout {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  width: 320px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--stroke-02);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 1000;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--text);
+  font-family: var(--font);
+  animation: updateFlyoutEnter 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.update-flyout[hidden] {
+  display: none !important;
+}
+
+@keyframes updateFlyoutEnter {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.update-flyout-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.update-flyout-badge-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.update-flyout-badge-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(46, 204, 113, 0.15);
+  color: #2ecc71;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+html[data-theme="light"] .update-flyout-badge-icon {
+  background: rgba(16, 185, 129, 0.15);
+  color: #059669;
+}
+
+.update-flyout-badge-icon .icon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2px;
+}
+
+.update-flyout-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.update-flyout-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.update-flyout-version {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2ecc71;
+  background: rgba(46, 204, 113, 0.12);
+  padding: 1px 6px;
+  border-radius: 4px;
+  width: fit-content;
+}
+
+html[data-theme="light"] .update-flyout-version {
+  color: #059669;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.update-flyout-close {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.update-flyout-close:hover {
+  color: var(--text);
+  background: var(--fill-02);
+}
+
+.update-flyout-close .icon {
+  width: 15px;
+  height: 15px;
+  stroke-width: 2px;
+}
+
+.update-flyout-content {
+  background: var(--fill-01);
+  border: 1px solid var(--stroke-01);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.update-flyout-notes {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+  max-height: 110px;
+  overflow-y: auto;
+  word-break: break-word;
+  white-space: pre-line;
+}
+
+.update-flyout-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.update-btn-release {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  background: #2ecc71;
+  color: #0c1a11;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 150ms ease, box-shadow 150ms ease, transform 100ms ease;
+}
+
+.update-btn-release:hover {
+  background: #39e383;
+  box-shadow: 0 2px 10px rgba(46, 204, 113, 0.38);
+}
+
+.update-btn-release:active {
+  transform: scale(0.98);
+}
+
+.update-btn-release .icon {
+  width: 14px;
+  height: 14px;
+  stroke-width: 2.2px;
+}
+
+.update-btn-dismiss {
+  appearance: none;
+  border: 1px solid var(--stroke-01);
+  background: var(--fill-01);
+  color: var(--muted);
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 7px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.update-btn-dismiss:hover {
+  background: var(--fill-02);
+  color: var(--text);
+  border-color: var(--stroke-02);
+}

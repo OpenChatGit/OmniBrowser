@@ -1,0 +1,108 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g. v0.1.1)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Release Windows x64
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Set up Ninja
+        uses: seanmiddleditch/gha-setup-ninja@v4
+
+      - name: Set up Visual Studio developer command prompt
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Download & Extract CEF
+        shell: powershell
+        run: |
+          powershell -ExecutionPolicy Bypass -File scripts/download_cef.ps1
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build OmniBrowser
+        run: |
+          cmake --build build --config Release
+
+      - name: Prepare Release Artifacts & Changelog
+        shell: powershell
+        run: |
+          $Version = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { if ("${{ inputs.version }}") { "${{ inputs.version }}" } else { "v0.1.0" } }
+          $ReleaseDir = "build/native/Release"
+          $ZipName = "OmniBrowser-$Version-windows-x64.zip"
+          $NotesFile = "release_notes.md"
+          
+          # Verify the executable was produced
+          if (-not (Test-Path "$ReleaseDir/OmniBrowser.exe")) {
+            throw "Build output OmniBrowser.exe was not found in $ReleaseDir"
+          }
+
+          # Ensure UI assets are bundled
+          if (-not (Test-Path "$ReleaseDir/ui/index.html")) {
+            Copy-Item -Path "ui" -Destination "$ReleaseDir/ui" -Recurse -Force
+          }
+
+          Write-Host "Compressing $ReleaseDir into $ZipName..."
+          Compress-Archive -Path "$ReleaseDir/*" -DestinationPath $ZipName -Force
+          Write-Host "Archive created: $ZipName"
+
+          # Extract matching version section from CHANGELOG.md
+          $CleanVersion = $Version -replace '^v', ''
+          $ChangelogFile = "CHANGELOG.md"
+          if (Test-Path $ChangelogFile) {
+            $Content = Get-Content -Path $ChangelogFile -Raw
+            $Escaped = [regex]::Escape($CleanVersion)
+            $Pattern = "(?s)##\s+\[?v?$Escaped\]?[^\r\n]*\r?\n(.*?)(?=\r?\n##\s+\[|\Z)"
+            if ($Content -match $Pattern) {
+              $Notes = $matches[1].Trim()
+              Write-Host "Extracted changelog notes for version $Version"
+              Set-Content -Path $NotesFile -Value $Notes -Encoding utf8
+            } else {
+              Write-Warning "Could not find version $Version in $ChangelogFile. Using fallback."
+              Set-Content -Path $NotesFile -Value "Release $Version of OmniBrowser." -Encoding utf8
+            }
+          } else {
+            Set-Content -Path $NotesFile -Value "Release $Version of OmniBrowser." -Encoding utf8
+          }
+
+          echo "RELEASE_ZIP=$ZipName" >> $env:GITHUB_ENV
+          echo "RELEASE_TAG=$Version" >> $env:GITHUB_ENV
+          echo "RELEASE_NOTES_FILE=$NotesFile" >> $env:GITHUB_ENV
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: OmniBrowser ${{ env.RELEASE_TAG }}
+          body_path: ${{ env.RELEASE_NOTES_FILE }}
+          files: ${{ env.RELEASE_ZIP }}
+          draft: false
+          prerelease: false

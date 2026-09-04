@@ -41,6 +41,7 @@
   <link rel="stylesheet" href="css/browser.css" />
   <link rel="stylesheet" href="css/adblock.css" />
   <link rel="stylesheet" href="css/autocomplete.css" />
+  <link rel="stylesheet" href="css/update.css" />
 </head>
 <body>
   <div class="app-root">
@@ -122,6 +123,51 @@
             aria-expanded="false"
             data-tooltip="Media"
           ></button>
+        </div>
+        <div class="topbar-update-wrap" id="browser-update-wrap" hidden>
+          <button
+            type="button"
+            class="topbar-btn topbar-btn-update"
+            id="browser-update-btn"
+            aria-label="New update available"
+            aria-haspopup="dialog"
+            aria-expanded="false"
+            data-tooltip="Update available"
+          >
+            <span class="topbar-update-inner">
+              <i data-lucide="sparkles" class="icon topbar-update-icon"></i>
+              <span class="topbar-update-label">Update</span>
+            </span>
+            <span class="topbar-update-dot" aria-hidden="true"></span>
+          </button>
+          <div class="update-flyout" id="browser-update-flyout" role="dialog" aria-labelledby="update-flyout-title" hidden>
+            <div class="update-flyout-header">
+              <div class="update-flyout-badge-wrap">
+                <span class="update-flyout-badge-icon">
+                  <i data-lucide="arrow-up-circle" class="icon"></i>
+                </span>
+                <div class="update-flyout-header-text">
+                  <span class="update-flyout-title" id="update-flyout-title">Update Available</span>
+                  <span class="update-flyout-version" id="update-flyout-version">v0.0.0</span>
+                </div>
+              </div>
+              <button type="button" class="update-flyout-close" id="update-flyout-close" aria-label="Close update panel">
+                <i data-lucide="x" class="icon"></i>
+              </button>
+            </div>
+            <div class="update-flyout-content">
+              <p class="update-flyout-notes" id="update-flyout-notes">
+                A new version of OmniBrowser is available.
+              </p>
+            </div>
+            <div class="update-flyout-actions">
+              <a href="#" target="_blank" rel="noopener noreferrer" class="update-btn-release" id="update-flyout-link">
+                <i data-lucide="download" class="icon"></i>
+                <span>Download Release</span>
+              </a>
+              <button type="button" class="update-btn-dismiss" id="update-flyout-dismiss">Later</button>
+            </div>
+          </div>
         </div>
         <button
           type="button"
@@ -319,6 +365,7 @@
   <script src="js/features/browser/menu.js"></script>
   <script src="js/features/browser/adblock.js"></script>
   <script src="js/features/browser/autocomplete.js"></script>
+  <script src="js/features/browser/update-checker.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
