@@ -266,6 +266,17 @@ void OmniBrowserViewDelegate::OnBrowserDestroyed(
   (void)browser_view;
   if (auto* handler = OmniHandler::GetInstance()) {
     handler->UnregisterBrowserPane(browser);
+    if (pane_ == BrowserPane::DevTools) {
+      if (handler->devtools_browser_view()) {
+        if (auto shell = handler->shell_browser_view()) {
+          if (auto window = shell->GetWindow()) {
+            window->RemoveChildView(handler->devtools_browser_view());
+          }
+        }
+        handler->SetDevToolsBrowserView(nullptr);
+        handler->LayoutContentBrowser();
+      }
+    }
   }
 }
 
@@ -298,10 +309,17 @@ bool OmniBrowserViewDelegate::OnPopupBrowserViewCreated(
     }
     return true;
   }
-  if (auto* handler = OmniHandler::GetInstance()) {
-    if (popup_browser_view) {
-      if (auto browser = popup_browser_view->GetBrowser()) {
-        handler->RegisterDevToolsBrowser(browser);
+  auto* handler = OmniHandler::GetInstance();
+  if (handler && popup_browser_view) {
+    if (auto browser = popup_browser_view->GetBrowser()) {
+      handler->RegisterDevToolsBrowser(browser);
+    }
+    if (handler->IsDevToolsDocked() && handler->shell_browser_view()) {
+      if (auto window = handler->shell_browser_view()->GetWindow()) {
+        handler->SetDevToolsBrowserView(popup_browser_view);
+        window->AddChildView(popup_browser_view);
+        handler->LayoutContentBrowser();
+        return true;
       }
     }
   }

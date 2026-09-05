@@ -718,6 +718,139 @@
     requestAnimationFrame(reportSize);
   }
 
+  let findInput = null;
+  let findCount = null;
+  let findPrevBtn = null;
+  let findNextBtn = null;
+  let findCloseBtn = null;
+  let findQuery = "";
+
+  function updateFindResult(count, active) {
+    if (!findCount) return;
+    if (!findQuery) {
+      findCount.textContent = "0/0";
+      findCount.className = "omni-find-count";
+      return;
+    }
+    if (count <= 0) {
+      findCount.textContent = "0/0";
+      findCount.className = "omni-find-count no-matches";
+    } else {
+      findCount.textContent = `${active}/${count}`;
+      findCount.className = "omni-find-count has-matches";
+    }
+  }
+
+  function executeFind(query, findNext = false, forward = true) {
+    findQuery = (query || "").trim();
+    if (!window.OmniBridge || typeof window.OmniBridge.browserFind !== "function") return;
+    if (!findQuery) {
+      window.OmniBridge.browserStopFinding(true).catch(() => {});
+      if (findCount) {
+        findCount.textContent = "0/0";
+        findCount.className = "omni-find-count";
+      }
+      return;
+    }
+    window.OmniBridge.browserFind(findQuery, forward, false, findNext).catch(() => {});
+  }
+
+  function closeFind() {
+    if (window.OmniBridge && typeof window.OmniBridge.browserStopFinding === "function") {
+      window.OmniBridge.browserStopFinding(true).catch(() => {});
+    }
+    if (window.OmniBridge && typeof window.OmniBridge.overlayHide === "function") {
+      window.OmniBridge.overlayHide().catch(() => {});
+    }
+  }
+
+  function renderFind(payload) {
+    document.body.classList.remove("is-tab-tip", "is-history", "is-media", "is-shields");
+    document.body.classList.add("is-find");
+    const data = payload || {};
+    findQuery = data.query || "";
+
+    const bar = el("div", "omni-find-bar");
+    bar.setAttribute("role", "search");
+    bar.setAttribute("aria-label", "Find in page");
+
+    const iconWrap = el("span", "omni-find-icon");
+    iconWrap.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>';
+
+    findInput = el("input", "omni-find-input");
+    findInput.type = "text";
+    findInput.placeholder = "Find in page...";
+    findInput.value = findQuery;
+    findInput.autocomplete = "off";
+    findInput.spellcheck = false;
+
+    findCount = el("span", "omni-find-count", "0/0");
+
+    findPrevBtn = el("button", "omni-find-btn");
+    findPrevBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>';
+    findPrevBtn.type = "button";
+    findPrevBtn.title = "Previous (Shift+Enter)";
+    findPrevBtn.setAttribute("aria-label", "Previous match");
+
+    findNextBtn = el("button", "omni-find-btn");
+    findNextBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+    findNextBtn.type = "button";
+    findNextBtn.title = "Next (Enter)";
+    findNextBtn.setAttribute("aria-label", "Next match");
+
+    findCloseBtn = el("button", "omni-find-btn omni-find-close");
+    findCloseBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>';
+    findCloseBtn.type = "button";
+    findCloseBtn.title = "Close (Escape)";
+    findCloseBtn.setAttribute("aria-label", "Close find bar");
+
+    bar.append(iconWrap, findInput, findCount, findPrevBtn, findNextBtn, findCloseBtn);
+
+    panel = bar;
+    layout = bar;
+    root.replaceChildren(bar);
+
+    findInput.addEventListener("input", () => {
+      executeFind(findInput.value, false, true);
+    });
+
+    findInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        executeFind(findInput.value, true, !e.shiftKey);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        closeFind();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        closeFind();
+      }
+    });
+
+    findPrevBtn.addEventListener("click", () => {
+      executeFind(findInput.value, true, false);
+    });
+
+    findNextBtn.addEventListener("click", () => {
+      executeFind(findInput.value, true, true);
+    });
+
+    findCloseBtn.addEventListener("click", () => {
+      closeFind();
+    });
+
+    setTimeout(() => {
+      if (findInput) {
+        findInput.focus();
+        findInput.select();
+      }
+    }, 20);
+
+    if (findQuery) {
+      executeFind(findQuery, false, true);
+    }
+  }
+
   function clear() {
     if (resizeObserver) {
       resizeObserver.disconnect();
@@ -727,11 +860,17 @@
     layout = null;
     lastReportW = 0;
     lastReportH = 0;
+    findInput = null;
+    findCount = null;
+    findPrevBtn = null;
+    findNextBtn = null;
+    findCloseBtn = null;
     document.body.classList.remove(
       "is-tab-tip",
       "is-history",
       "is-media",
-      "is-shields"
+      "is-shields",
+      "is-find"
     );
     root.replaceChildren();
   }
@@ -750,7 +889,12 @@
         renderMedia(payload);
       } else if (payload.view === "shields") {
         renderShields(payload);
+      } else if (payload.view === "find") {
+        renderFind(payload);
       }
+    }
+    if (msg.type === "find-result") {
+      updateFindResult(msg.count, msg.active);
     }
     if (msg.type === "hide") {
       clear();

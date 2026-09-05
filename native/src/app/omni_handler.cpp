@@ -765,11 +765,28 @@ bool OmniHandler::OnPreKeyEvent(CefRefPtr<CefBrowser> browser,
   const bool alt = (event.modifiers & EVENTFLAG_ALT_DOWN) != 0;
   const int key = event.windows_key_code;
 
-  if (!IsDevToolsBrowser(browser) &&
-      (key == VK_F12 ||
-       (ctrl && shift && !alt && (key == 'I' || key == 'i')))) {
-    ToggleDevTools();
-    return true;
+  if (!IsDevToolsBrowser(browser)) {
+    if (key == VK_F12 ||
+        (ctrl && shift && !alt && (key == 'I' || key == 'i'))) {
+      ToggleDevTools();
+      return true;
+    }
+
+    if (ctrl && !shift && !alt && (key == 'L' || key == 'l')) {
+      if (shell_browser_view_) {
+        shell_browser_view_->RequestFocus();
+        if (auto b = shell_browser_view_->GetBrowser()) {
+          b->GetHost()->SetFocus(true);
+        }
+      }
+      EmitBrowserEvent(Json{{"type", "focus-address-bar"}});
+      return true;
+    }
+
+    if (ctrl && !shift && !alt && (key == 'F' || key == 'f')) {
+      ToggleFindBar();
+      return true;
+    }
   }
 
   if (!IsContentBrowser(browser) || !content_visible_) {
@@ -920,6 +937,15 @@ void OmniHandler::LayoutContentBrowser() {
     } else {
       box->SetFlexForView(shell_browser_view_, 1);
     }
+  }
+
+  if (devtools_browser_view_) {
+    const bool show_dt = devtools_docked_ && show_content;
+    devtools_browser_view_->SetVisible(show_dt);
+    if (box) {
+      box->SetFlexForView(devtools_browser_view_, show_dt ? 1 : 0);
+    }
+    devtools_browser_view_->InvalidateLayout();
   }
 
   shell_browser_view_->InvalidateLayout();
@@ -1490,6 +1516,10 @@ void OmniHandler::OverlayShow(int anchor_right,
     // overlay doesn't pulse between the placeholder and measured height.
     ApplyOverlayBounds(overlay_height_ > 0 ? overlay_height_ : 120);
   }
+  const std::string view_type =
+      payload.is_object() ? payload.value("view", "") : "";
+  active_overlay_view_ = view_type;
+
 #if defined(OS_WIN)
   if (overlay_browser_view_) {
     if (auto browser = overlay_browser_view_->GetBrowser()) {
@@ -1498,7 +1528,7 @@ void OmniHandler::OverlayShow(int anchor_right,
         if (hwnd) {
           ::BringWindowToTop(hwnd);
           ::SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0,
-                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW | SWP_NOACTIVATE);
         }
       }
     }
@@ -1520,6 +1550,7 @@ void OmniHandler::OverlayResize(int width, int height) {
 
 void OmniHandler::OverlayHide() {
   CEF_REQUIRE_UI_THREAD();
+  active_overlay_view_.clear();
   if (!overlay_visible_) {
     return;
   }
@@ -1529,6 +1560,383 @@ void OmniHandler::OverlayHide() {
   }
   EmitOverlayEvent(Json{{"type", "hide"}});
   EmitBrowserEvent(Json{{"type", "overlay"}, {"visible", false}});
+}
+
+namespace {
+constexpr const char* kInPageFindBarScript = R"JS(
+(() => {
+  function clearAllHighlights() {
+    try {
+      const marks = document.querySelectorAll('mark.omni-match');
+      marks.forEach(m => {
+        const parent = m.parentNode;
+        if (parent) {
+          parent.replaceChild(document.createTextNode(m.textContent), m);
+          parent.normalize();
+        }
+      });
+    } catch(e) {}
+  }
+
+  let host = document.getElementById('omni-find-host');
+  if (host) {
+    host.remove();
+    clearAllHighlights();
+    return;
+  }
+
+  host = document.createElement('div');
+  host.id = 'omni-find-host';
+  host.style.cssText = 'position:fixed;top:14px;right:22px;z-index:2147483647;pointer-events:auto;line-height:normal;';
+  const shadow = host.attachShadow({mode: 'open'});
+  shadow.innerHTML = `
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      :host { all: initial; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+      .find-pill {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        height: 38px;
+        padding: 4px 6px 4px 10px;
+        background: rgba(26, 25, 26, 0.94);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 20px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+        color: #e4e4e4;
+        user-select: none;
+        animation: omniFindIn 140ms cubic-bezier(0.16, 1, 0.3, 1);
+      }
+      @keyframes omniFindIn {
+        from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+      }
+      @media (prefers-color-scheme: light) {
+        .find-pill {
+          background: rgba(255, 255, 255, 0.96);
+          border: 1px solid rgba(0, 0, 0, 0.16);
+          color: #1a191a;
+          box-shadow: 0 6px 24px rgba(0, 0, 0, 0.16);
+        }
+        .find-input {
+          background: rgba(0, 0, 0, 0.05) !important;
+          border-color: rgba(0, 0, 0, 0.12) !important;
+          color: #1a191a !important;
+        }
+        .find-input::placeholder {
+          color: #888888 !important;
+        }
+        .find-count {
+          color: #6a696a !important;
+          background: rgba(0, 0, 0, 0.05) !important;
+        }
+        .find-btn {
+          color: #6a696a !important;
+        }
+        .find-btn:hover {
+          background: rgba(0, 0, 0, 0.08) !important;
+          color: #1a191a !important;
+        }
+      }
+      .find-input {
+        width: 155px;
+        height: 28px;
+        line-height: 26px;
+        padding: 0 10px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        border-radius: 14px;
+        color: #ffffff;
+        font-family: inherit;
+        font-size: 13px;
+        outline: none;
+        box-sizing: border-box;
+        vertical-align: middle;
+      }
+      .find-input::placeholder {
+        color: #888888;
+        line-height: 26px;
+      }
+      .find-input:focus {
+        border-color: #66c0f4;
+        box-shadow: 0 0 0 2px rgba(102, 192, 244, 0.25);
+      }
+      .find-count {
+        font-size: 11px;
+        color: #8a8a8a;
+        padding: 2px 8px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.06);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 22px;
+      }
+      .find-count.has-matches {
+        color: #66c0f4;
+        font-weight: 600;
+        background: rgba(102, 192, 244, 0.16);
+      }
+      .find-btn {
+        width: 26px;
+        height: 26px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        border: none;
+        background: transparent;
+        color: #8a8a8a;
+        cursor: pointer;
+        padding: 0;
+        flex-shrink: 0;
+        transition: background 100ms ease, color 100ms ease;
+      }
+      .find-btn svg {
+        display: block;
+        pointer-events: none;
+      }
+      .find-btn:hover {
+        background: rgba(255, 255, 255, 0.12);
+        color: #ffffff;
+      }
+    </style>
+    <div class="find-pill">
+      <input class="find-input" type="text" placeholder="Find in page..." autocomplete="off" spellcheck="false" />
+      <span class="find-count">0/0</span>
+      <button class="find-btn" id="find-prev" title="Previous (Shift+Enter)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg></button>
+      <button class="find-btn" id="find-next" title="Next (Enter)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></button>
+      <button class="find-btn" id="find-close" title="Close (Escape)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></button>
+    </div>
+  `;
+  (document.body || document.documentElement).appendChild(host);
+  const input = shadow.querySelector('.find-input');
+  const count = shadow.querySelector('.find-count');
+  const prevBtn = shadow.getElementById('find-prev');
+  const nextBtn = shadow.getElementById('find-next');
+  const closeBtn = shadow.getElementById('find-close');
+
+  let totalMatches = 0;
+  let currentIndex = 0;
+
+  function updateDisplay() {
+    if (!input.value) {
+      count.textContent = "0/0";
+      count.classList.remove("has-matches");
+      return;
+    }
+    if (totalMatches > 0) {
+      count.textContent = `${currentIndex}/${totalMatches}`;
+      count.classList.add("has-matches");
+    } else {
+      count.textContent = "0/0";
+      count.classList.remove("has-matches");
+    }
+  }
+
+  function setActiveMark(index, scroll) {
+    const allMarks = document.querySelectorAll('mark.omni-match');
+    allMarks.forEach((m, i) => {
+      if (i === index) {
+        m.style.cssText = 'background-color:#ff9800!important;color:#1a191a!important;outline:2px solid #e65100!important;border-radius:2px!important;padding:0 1px!important;';
+        if (scroll) {
+          try { m.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch(e) {}
+        }
+      } else {
+        m.style.cssText = 'background-color:#ffe066!important;color:#1a191a!important;border-radius:2px!important;padding:0 1px!important;';
+      }
+    });
+  }
+
+  function performHighlight(query) {
+    clearAllHighlights();
+    const q = (query || "").trim().toLowerCase();
+    if (!q) {
+      totalMatches = 0;
+      currentIndex = 0;
+      updateDisplay();
+      return;
+    }
+
+    try {
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      const textNodes = [];
+      let node;
+      while ((node = walker.nextNode())) {
+        if (!node.nodeValue) continue;
+        const p = node.parentElement;
+        if (p && (p.tagName === "SCRIPT" || p.tagName === "STYLE" || p.tagName === "NOSCRIPT" || p.closest('#omni-find-host'))) continue;
+        if (node.nodeValue.toLowerCase().includes(q)) {
+          textNodes.push(node);
+        }
+      }
+
+      for (const n of textNodes) {
+        const text = n.nodeValue;
+        let idx = text.toLowerCase().indexOf(q);
+        if (idx === -1) continue;
+
+        const frag = document.createDocumentFragment();
+        let lastIdx = 0;
+        while (idx !== -1) {
+          if (idx > lastIdx) {
+            frag.appendChild(document.createTextNode(text.substring(lastIdx, idx)));
+          }
+          const mark = document.createElement('mark');
+          mark.className = 'omni-match';
+          mark.style.cssText = 'background-color:#ffe066!important;color:#1a191a!important;border-radius:2px!important;padding:0 1px!important;';
+          mark.textContent = text.substring(idx, idx + query.trim().length);
+          frag.appendChild(mark);
+
+          lastIdx = idx + query.trim().length;
+          idx = text.toLowerCase().indexOf(q, lastIdx);
+        }
+        if (lastIdx < text.length) {
+          frag.appendChild(document.createTextNode(text.substring(lastIdx)));
+        }
+        if (n.parentNode) {
+          n.parentNode.replaceChild(frag, n);
+        }
+      }
+    } catch(e) {}
+
+    const allMarks = document.querySelectorAll('mark.omni-match');
+    totalMatches = allMarks.length;
+    if (totalMatches > 0) {
+      currentIndex = 1;
+      setActiveMark(0, true);
+    } else {
+      currentIndex = 0;
+    }
+    updateDisplay();
+  }
+
+  function cycleMatch(backwards) {
+    if (totalMatches <= 0) return;
+    if (backwards) {
+      currentIndex = currentIndex <= 1 ? totalMatches : currentIndex - 1;
+    } else {
+      currentIndex = currentIndex >= totalMatches ? 1 : currentIndex + 1;
+    }
+    setActiveMark(currentIndex - 1, true);
+    updateDisplay();
+  }
+
+  function closeFind() {
+    clearAllHighlights();
+    host.remove();
+  }
+
+  input.addEventListener('input', () => {
+    performHighlight(input.value);
+  });
+
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      cycleMatch(e.shiftKey);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      closeFind();
+    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+      e.preventDefault();
+      closeFind();
+    }
+  });
+
+  prevBtn.addEventListener('click', () => cycleMatch(true));
+  nextBtn.addEventListener('click', () => cycleMatch(false));
+  closeBtn.addEventListener('click', closeFind);
+
+  setTimeout(() => {
+    input.focus();
+  }, 25);
+})();
+)JS";
+
+constexpr const char* kHideFindBarScript = R"JS(
+(() => {
+  let host = document.getElementById('omni-find-host');
+  if (host) {
+    host.remove();
+  }
+  try {
+    const marks = document.querySelectorAll('mark.omni-match');
+    marks.forEach(m => {
+      const parent = m.parentNode;
+      if (parent) {
+        parent.replaceChild(document.createTextNode(m.textContent), m);
+        parent.normalize();
+      }
+    });
+  } catch(e) {}
+})();
+)JS";
+}  // namespace
+
+void OmniHandler::ToggleFindBar() {
+  CEF_REQUIRE_UI_THREAD();
+  CefRefPtr<CefBrowser> browser;
+  if (content_visible_) {
+    if (auto view = content_browser_view()) {
+      browser = view->GetBrowser();
+    }
+  } else if (shell_browser_view_) {
+    browser = shell_browser_view_->GetBrowser();
+  }
+  if (!browser) {
+    return;
+  }
+  auto frame = browser->GetMainFrame();
+  if (!frame) {
+    return;
+  }
+  frame->ExecuteJavaScript(kInPageFindBarScript, frame->GetURL(), 0);
+}
+
+void OmniHandler::ShowFindBar() {
+  CEF_REQUIRE_UI_THREAD();
+  CefRefPtr<CefBrowser> browser;
+  if (content_visible_) {
+    if (auto view = content_browser_view()) {
+      browser = view->GetBrowser();
+    }
+  } else if (shell_browser_view_) {
+    browser = shell_browser_view_->GetBrowser();
+  }
+  if (!browser) {
+    return;
+  }
+  auto frame = browser->GetMainFrame();
+  if (!frame) {
+    return;
+  }
+  frame->ExecuteJavaScript(kInPageFindBarScript, frame->GetURL(), 0);
+}
+
+void OmniHandler::HideFindBar() {
+  CEF_REQUIRE_UI_THREAD();
+  CefRefPtr<CefBrowser> browser;
+  if (content_visible_) {
+    if (auto view = content_browser_view()) {
+      browser = view->GetBrowser();
+    }
+  } else if (shell_browser_view_) {
+    browser = shell_browser_view_->GetBrowser();
+  }
+  if (!browser) {
+    return;
+  }
+  auto frame = browser->GetMainFrame();
+  if (!frame) {
+    return;
+  }
+  frame->ExecuteJavaScript(kHideFindBarScript, frame->GetURL(), 0);
 }
 
 void OmniHandler::SetAiActive(bool active, int agent_count) {
@@ -1933,6 +2341,31 @@ void OmniHandler::SubscribeBrowserEvents(
 
 void OmniHandler::UnsubscribeBrowserEvents(int64_t query_id) {
   browser_subscribers_.erase(query_id);
+}
+
+void OmniHandler::OnFindResult(CefRefPtr<CefBrowser> browser,
+                               int identifier,
+                               int count,
+                               const CefRect& selectionRect,
+                               int activeMatchOrdinal,
+                               bool finalUpdate) {
+  CEF_REQUIRE_UI_THREAD();
+  (void)browser;
+  (void)identifier;
+  (void)selectionRect;
+  if (!finalUpdate) {
+    return;
+  }
+  EmitBrowserEvent(Json{
+      {"type", "find-result"},
+      {"count", count},
+      {"active", activeMatchOrdinal},
+  });
+  EmitOverlayEvent(Json{
+      {"type", "find-result"},
+      {"count", count},
+      {"active", activeMatchOrdinal},
+  });
 }
 
 void OmniHandler::EmitBrowserEvent(const Json& event) {

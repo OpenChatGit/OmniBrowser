@@ -14,7 +14,7 @@ body {
   overflow: hidden !important;
   scrollbar-width: none;
   color-scheme: inherit;
-  background: var(--bg-panel);
+  background: transparent !important;
   color: var(--text);
   font-family: "Segoe UI", system-ui, sans-serif;
   user-select: none;
@@ -590,4 +590,115 @@ body.is-shields {
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+body.is-find,
+html:has(body.is-find) {
+  background: transparent !important;
+}
+
+/* In-Page Find Overlay Bar */
+#overlay-root .omni-find-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 340px;
+  height: 44px;
+  padding: 5px 12px;
+  background: var(--bg-panel);
+  border: 1px solid var(--stroke-02, rgba(255, 255, 255, 0.15));
+  border-radius: 22px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  box-sizing: border-box;
+  user-select: none;
+}
+
+html[data-theme="light"] #overlay-root .omni-find-bar {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.16);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+#overlay-root .omni-find-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  flex-shrink: 0;
+  margin-left: 2px;
+}
+
+#overlay-root .omni-find-input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  background: var(--bg-subtle, rgba(255, 255, 255, 0.06));
+  border: 1px solid var(--stroke-01);
+  border-radius: 15px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  outline: none;
+  user-select: text;
+}
+
+#overlay-root .omni-find-input:focus {
+  border-color: var(--primary, #66c0f4);
+  box-shadow: 0 0 0 2px rgba(102, 192, 244, 0.25);
+}
+
+#overlay-root .omni-find-count {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--fill-01, rgba(255, 255, 255, 0.05));
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+#overlay-root .omni-find-count.has-matches {
+  color: var(--primary, #66c0f4);
+  font-weight: 600;
+  background: rgba(102, 192, 244, 0.15);
+}
+
+#overlay-root .omni-find-count.no-matches {
+  color: #ef4444;
+  font-weight: 500;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+#overlay-root .omni-find-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.1s ease;
+}
+
+#overlay-root .omni-find-btn:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.12));
+  color: var(--text);
+}
+
+#overlay-root .omni-find-btn:active {
+  background: var(--bg-active, rgba(255, 255, 255, 0.2));
+  transform: scale(0.94);
+}
+
+#overlay-root .omni-find-btn.omni-find-close {
+  font-size: 12px;
+  margin-left: 2px;
 }

@@ -42,6 +42,7 @@
   <link rel="stylesheet" href="css/adblock.css" />
   <link rel="stylesheet" href="css/autocomplete.css" />
   <link rel="stylesheet" href="css/update.css" />
+  <link rel="stylesheet" href="css/find.css" />
 </head>
 <body>
   <div class="app-root">
@@ -134,11 +135,7 @@
             aria-expanded="false"
             data-tooltip="Update available"
           >
-            <span class="topbar-update-inner">
-              <i data-lucide="sparkles" class="icon topbar-update-icon"></i>
-              <span class="topbar-update-label">Update</span>
-            </span>
-            <span class="topbar-update-dot" aria-hidden="true"></span>
+            <span class="topbar-update-label">Update</span>
           </button>
           <div class="update-flyout" id="browser-update-flyout" role="dialog" aria-labelledby="update-flyout-title" hidden>
             <div class="update-flyout-header">
@@ -366,6 +363,7 @@
   <script src="js/features/browser/adblock.js"></script>
   <script src="js/features/browser/autocomplete.js"></script>
   <script src="js/features/browser/update-checker.js"></script>
+  <script src="js/features/browser/find.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

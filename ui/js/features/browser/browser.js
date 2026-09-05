@@ -1671,7 +1671,7 @@
     }
 
     function presentOverlayTabTip(btn, data) {
-      if (!btn || !usesOverlayTabTip()) {
+      if (!btn || !usesOverlayTabTip() || (window.OmniFind && window.OmniFind.isOpen())) {
         return;
       }
       const rect = btn.getBoundingClientRect();
@@ -2411,8 +2411,46 @@
       scheduleHideDownloadButton();
     }
 
+    function focusAddressBar() {
+      if (root.dataset.mode === "start") {
+        if (startInput) {
+          startInput.focus();
+          startInput.select();
+        }
+      } else {
+        addressEditing = true;
+        syncSearchFields(currentUrl());
+        if (searchInput) {
+          searchInput.focus();
+          searchInput.select();
+        }
+      }
+    }
+
     function onBrowserEvent(msg) {
       if (!msg || !msg.type) {
+        return;
+      }
+      if (msg.type === "focus-address-bar") {
+        focusAddressBar();
+        return;
+      }
+      if (msg.type === "toggle-find") {
+        if (window.OmniFind && typeof window.OmniFind.toggle === "function") {
+          window.OmniFind.toggle();
+        }
+        return;
+      }
+      if (msg.type === "find-result") {
+        if (window.OmniFind && typeof window.OmniFind.updateResult === "function") {
+          window.OmniFind.updateResult(Number(msg.count) || 0, Number(msg.active) || 0);
+        }
+        return;
+      }
+      if (msg.type === "overlay" && msg.visible === false) {
+        if (window.OmniFind && typeof window.OmniFind.setIsOpen === "function") {
+          window.OmniFind.setIsOpen(false);
+        }
         return;
       }
       if (msg.type === "download") {
@@ -2734,6 +2772,18 @@
         if (ctrl && event.shiftKey && (event.key === "T" || event.key === "t")) {
           event.preventDefault();
           restoreClosedTab();
+          return;
+        }
+        if (ctrl && !event.shiftKey && !event.altKey && (event.key === "L" || event.key === "l")) {
+          event.preventDefault();
+          focusAddressBar();
+          return;
+        }
+        if (ctrl && !event.shiftKey && !event.altKey && (event.key === "F" || event.key === "f")) {
+          event.preventDefault();
+          if (window.OmniFind && typeof window.OmniFind.toggle === "function") {
+            window.OmniFind.toggle();
+          }
           return;
         }
         if (root.dataset.mode !== "browse") {

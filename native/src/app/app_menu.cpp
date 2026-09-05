@@ -36,6 +36,7 @@ enum CommandId : int {
   kToggleAdblock = 1010,
   kToggleAdblockAggressive = 1011,
   kToggleDevTools = 1012,
+  kToggleDockDevTools = 1013,
   kAppearanceMenu = 1020,
   kAppearanceSystem = 1021,
   kAppearanceDark = 1022,
@@ -159,6 +160,11 @@ CefRefPtr<CefMenuModel> AppMenuDelegate::Build() {
   bind(kToggleDevTools, Json{{"action", "toggle-devtools"}});
   menu->SetAccelerator(kToggleDevTools, 'I', true, true, false);
 
+  const bool devtools_docked = owner_ ? owner_->IsDevToolsDocked() : false;
+  menu->AddCheckItem(kToggleDockDevTools, "Dock Dev Tools");
+  menu->SetChecked(kToggleDockDevTools, devtools_docked);
+  bind(kToggleDockDevTools, Json{{"action", "toggle-dock-devtools"}});
+
   menu->AddItem(kOpenInfo, "Info");
   bind(kOpenInfo, Json{{"action", "open-info"}});
 
@@ -208,6 +214,12 @@ void AppMenuDelegate::ExecuteCommand(CefRefPtr<CefMenuModel> menu_model,
   if (command_id == kToggleDevTools) {
     if (owner_) {
       owner_->ToggleDevTools();
+    }
+    return;
+  }
+  if (command_id == kToggleDockDevTools) {
+    if (owner_) {
+      owner_->SetDevToolsDocked(!owner_->IsDevToolsDocked());
     }
     return;
   }

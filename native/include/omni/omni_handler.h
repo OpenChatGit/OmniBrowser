@@ -11,6 +11,7 @@
 #include "include/cef_client.h"
 #include "include/cef_download_handler.h"
 #include "include/cef_drag_handler.h"
+#include "include/cef_find_handler.h"
 #include "include/cef_focus_handler.h"
 #include "include/cef_keyboard_handler.h"
 #include "include/cef_resource_request_handler.h"
@@ -40,7 +41,8 @@ class OmniHandler : public CefClient,
                     public CefDragHandler,
                     public CefFocusHandler,
                     public CefKeyboardHandler,
-                    public CefDownloadHandler {
+                    public CefDownloadHandler,
+                    public CefFindHandler {
  public:
   explicit OmniHandler(bool alloy_style);
   ~OmniHandler() override;
@@ -130,12 +132,19 @@ class OmniHandler : public CefClient,
   void EmitMenuCommand(const Json& command);
   void ToggleDevTools();
   void ShowDevToolsNow();
+  bool IsDevToolsDocked() const { return devtools_docked_; }
+  void SetDevToolsDocked(bool docked) { devtools_docked_ = docked; }
+  CefRefPtr<CefBrowserView> devtools_browser_view() const { return devtools_browser_view_; }
+  void SetDevToolsBrowserView(CefRefPtr<CefBrowserView> view) { devtools_browser_view_ = view; }
   void RegisterDevToolsBrowser(CefRefPtr<CefBrowser> browser);
   bool IsDevToolsBrowser(CefRefPtr<CefBrowser> browser) const;
   void ShowHistoryFlyout(const Json& recent_tabs);
   void HideHistoryFlyout();
   void HandleOverlayCommand(const Json& command);
   void EmitDownloadProgress();
+  void ToggleFindBar();
+  void ShowFindBar();
+  void HideFindBar();
 
   void SetAiActive(bool active, int agent_count = 1);
   bool is_ai_active() const { return ai_active_; }
@@ -173,6 +182,14 @@ class OmniHandler : public CefClient,
   CefRefPtr<CefFocusHandler> GetFocusHandler() override { return this; }
   CefRefPtr<CefKeyboardHandler> GetKeyboardHandler() override { return this; }
   CefRefPtr<CefDownloadHandler> GetDownloadHandler() override { return this; }
+  CefRefPtr<CefFindHandler> GetFindHandler() override { return this; }
+
+  void OnFindResult(CefRefPtr<CefBrowser> browser,
+                    int identifier,
+                    int count,
+                    const CefRect& selectionRect,
+                    int activeMatchOrdinal,
+                    bool finalUpdate) override;
 
   bool OnBeforeDownload(CefRefPtr<CefBrowser> browser,
                         CefRefPtr<CefDownloadItem> download_item,
@@ -332,6 +349,7 @@ class OmniHandler : public CefClient,
   int chrome_height_ = 80;
   bool content_visible_ = false;
   bool overlay_visible_ = false;
+  std::string active_overlay_view_;
   bool app_menu_open_ = false;
   bool history_flyout_visible_ = false;
   bool ai_active_ = false;
@@ -365,6 +383,9 @@ class OmniHandler : public CefClient,
   int overlay_browser_id_ = -1;
   std::unordered_set<int> content_browser_ids_;
   std::unordered_set<int> devtools_browser_ids_;
+
+  bool devtools_docked_ = true;
+  CefRefPtr<CefBrowserView> devtools_browser_view_;
 
   IMPLEMENT_REFCOUNTING(OmniHandler);
 };

@@ -69,11 +69,7 @@ void OmniApp::OnContextInitialized() {
   CefBrowserSettings overlay_settings;
   // Windowed CEF browsers cannot composite true transparency (transparent
   // alpha clears to white). Match Brave: opaque menu surface, sized to fit.
-  if (ChromeShouldUseDark()) {
-    overlay_settings.background_color = CefColorSetARGB(255, 0x2a, 0x29, 0x2a);
-  } else {
-    overlay_settings.background_color = CefColorSetARGB(255, 0xf3, 0xf2, 0xf3);
-  }
+  overlay_settings.background_color = CefColorSetARGB(0, 0, 0, 0);
   CefRefPtr<CefBrowserView> overlay_view = CefBrowserView::CreateBrowserView(
       handler, paths::UiOverlayUrl(), overlay_settings, nullptr, nullptr,
       overlay_delegate);

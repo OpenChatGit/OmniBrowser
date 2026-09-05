@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "omnibrowser": {
+      "command": "C:\\Users\\Nicol\\Documents\\Github\\browser\\build\\native\\Release\\OmniBrowser.exe",
+      "args": [
+        "--mcp"
+      ]
+    }
+  }
+}

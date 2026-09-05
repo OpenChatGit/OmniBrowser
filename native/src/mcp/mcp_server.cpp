@@ -4,6 +4,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <memory>
@@ -12,8 +13,19 @@
 #include <thread>
 #include <unordered_map>
 
+#if defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <objidl.h>
+#include <gdiplus.h>
+#pragma comment(lib, "gdiplus.lib")
+#endif
+
 #include "include/base/cef_callback.h"
 #include "include/cef_app.h"
+#include "include/cef_parser.h"
 #include "include/cef_string_visitor.h"
 #include "include/cef_task.h"
 #include "include/wrapper/cef_closure_task.h"
@@ -27,6 +39,36 @@
 namespace omni {
 
 namespace {
+
+#if defined(_WIN32)
+static int GetEncoderClsid(const WCHAR* format, CLSID* pClsid) {
+  UINT num = 0;
+  UINT size = 0;
+  Gdiplus::GetImageEncodersSize(&num, &size);
+  if (size == 0) return -1;
+  auto* pImageCodecInfo = reinterpret_cast<Gdiplus::ImageCodecInfo*>(malloc(size));
+  if (!pImageCodecInfo) return -1;
+  Gdiplus::GetImageEncoders(num, size, pImageCodecInfo);
+  for (UINT j = 0; j < num; ++j) {
+    if (wcscmp(pImageCodecInfo[j].MimeType, format) == 0) {
+      *pClsid = pImageCodecInfo[j].Clsid;
+      free(pImageCodecInfo);
+      return j;
+    }
+  }
+  free(pImageCodecInfo);
+  return -1;
+}
+
+static void EnsureGdiplusStarted() {
+  static std::once_flag flag;
+  std::call_once(flag, []() {
+    Gdiplus::GdiplusStartupInput input;
+    ULONG_PTR token;
+    Gdiplus::GdiplusStartup(&token, &input, nullptr);
+  });
+}
+#endif
 
 // Thread-safe synchronous responder for ApiDispatcher calls
 class SyncApiResponder : public ApiResponder {
@@ -477,6 +519,59 @@ void McpServer::RegisterTools() {
       "Whether the OmniBrowser window is already open, MCP reachability, "
       "active tab, and connected agent sessions.",
       {{"type", "object"}, {"properties", Json::object()}}};
+
+  tools_["browser_take_screenshot"] = {
+      "browser_take_screenshot",
+      "Capture a visual screenshot of the active or specified browser tab. "
+      "Returns standard MCP image content (PNG/JPEG) and base64 data.",
+      {{"type", "object"},
+       {"properties",
+        {{"tabId",
+          {{"type", "string"},
+           {"description", "Optional tab ID (defaults to active tab)"}}},
+         {"format",
+          {{"type", "string"},
+           {"enum", {"png", "jpeg"}},
+           {"description", "Image format: 'png' or 'jpeg' (default png)"}}},
+         {"savePath",
+          {{"type", "string"},
+           {"description",
+            "Optional absolute file path to save the screenshot image file on disk"}}}}}}};
+
+  tools_["browser_screenshot"] = tools_["browser_take_screenshot"];
+  tools_["browser_screenshot"].name = "browser_screenshot";
+
+  tools_["browser_toggle_find"] = {
+      "browser_toggle_find",
+      "Toggle in-page text search find bar overlay floating over web content",
+      {{"type", "object"}, {"properties", Json::object()}}};
+
+  tools_["browser_find"] = {
+      "browser_find",
+      "Search and locate text on the active or specified webpage without opening "
+      "the visual find bar. Returns match count and contextual snippets. "
+      "Can optionally highlight matches or scroll to the first match.",
+      {{"type", "object"},
+       {"properties",
+        {{"query",
+          {{"type", "string"},
+           {"description", "The text to search for on the page"}}},
+         {"tabId",
+          {{"type", "string"},
+           {"description", "Optional tab ID (defaults to active tab)"}}},
+         {"caseSensitive",
+          {{"type", "boolean"},
+           {"description", "Case-sensitive search (default false)"}}},
+         {"maxMatches",
+          {{"type", "integer"},
+           {"description", "Max number of match snippets to return (default 25)"}}},
+         {"highlight",
+          {{"type", "boolean"},
+           {"description", "Visually highlight matches on the page (default false)"}}},
+         {"scrollTo",
+          {{"type", "boolean"},
+           {"description", "Scroll the page to the first match (default false)"}}}}},
+       {"required", {"query"}}}};
 }
 
 void McpServer::RegisterResources() {
@@ -921,6 +1016,245 @@ Json McpServer::ToolStatus(const Json& /*args*/) {
   };
 }
 
+Json McpServer::ToolTakeScreenshot(const Json& args) {
+#if defined(_WIN32)
+  EnsureGdiplusStarted();
+  const std::string tab_id = args.value("tabId", "");
+  const std::string format = args.value("format", "png");
+  std::string save_path = args.value("savePath", "");
+  if (save_path.empty()) {
+    save_path = args.value("save_path", "");
+  }
+  if (save_path.empty()) {
+    save_path = args.value("filepath", "");
+  }
+  if (save_path.empty()) {
+    save_path = args.value("filePath", "");
+  }
+  if (save_path.empty()) {
+    save_path = args.value("path", "");
+  }
+
+  HWND hwnd = nullptr;
+  RunOnUiAndWait([&]() {
+    auto* handler = OmniHandler::GetInstance();
+    if (!handler) return;
+    CefRefPtr<CefBrowserView> view;
+    if (!tab_id.empty()) {
+      view = handler->ContentViewForTab(tab_id);
+    }
+    if (!view) {
+      view = handler->content_browser_view();
+    }
+    if (view && view->GetBrowser() && view->GetBrowser()->GetHost()) {
+      hwnd = view->GetBrowser()->GetHost()->GetWindowHandle();
+    }
+    if (!hwnd && handler->shell_browser_view()) {
+      if (auto win = handler->shell_browser_view()->GetWindow()) {
+        hwnd = win->GetWindowHandle();
+      }
+    }
+  });
+
+  if (!hwnd) {
+    return Json{{"error", "No active browser window available to capture"},
+                {"ok", false}};
+  }
+
+  RECT rc;
+  GetClientRect(hwnd, &rc);
+  int width = rc.right - rc.left;
+  int height = rc.bottom - rc.top;
+  if (width <= 0 || height <= 0) {
+    width = 1280;
+    height = 800;
+  }
+
+  HDC hdc_screen = GetDC(hwnd);
+  HDC hdc_mem = CreateCompatibleDC(hdc_screen);
+  HBITMAP hbm = CreateCompatibleBitmap(hdc_screen, width, height);
+  HGDIOBJ old_bm = SelectObject(hdc_mem, hbm);
+
+  // Capture content surface
+  BOOL captured = PrintWindow(hwnd, hdc_mem, PW_RENDERFULLCONTENT);
+  if (!captured) {
+    captured = BitBlt(hdc_mem, 0, 0, width, height, hdc_screen, 0, 0, SRCCOPY);
+  }
+
+  IStream* stream = nullptr;
+  CreateStreamOnHGlobal(NULL, TRUE, &stream);
+
+  CLSID clsid;
+  std::string mime_type = "image/png";
+  if (format == "jpeg" || format == "jpg") {
+    GetEncoderClsid(L"image/jpeg", &clsid);
+    mime_type = "image/jpeg";
+  } else {
+    GetEncoderClsid(L"image/png", &clsid);
+  }
+
+  {
+    Gdiplus::Bitmap bitmap(hbm, nullptr);
+    bitmap.Save(stream, &clsid, nullptr);
+  }
+
+  STATSTG stat;
+  stream->Stat(&stat, STATFLAG_NONAME);
+  DWORD bytes_size = (DWORD)stat.cbSize.QuadPart;
+  std::vector<char> buffer(bytes_size);
+  LARGE_INTEGER seek_pos;
+  seek_pos.QuadPart = 0;
+  stream->Seek(seek_pos, STREAM_SEEK_SET, NULL);
+  ULONG bytes_read = 0;
+  stream->Read(buffer.data(), bytes_size, &bytes_read);
+  stream->Release();
+
+  SelectObject(hdc_mem, old_bm);
+  DeleteObject(hbm);
+  DeleteDC(hdc_mem);
+  ReleaseDC(hwnd, hdc_screen);
+
+  if (buffer.empty()) {
+    return Json{{"error", "Failed to encode screenshot"}, {"ok", false}};
+  }
+
+  if (!save_path.empty()) {
+    std::ofstream out(save_path, std::ios::binary);
+    if (out) {
+      out.write(buffer.data(), buffer.size());
+    }
+  }
+
+  std::string b64 = CefBase64Encode(buffer.data(), buffer.size()).ToString();
+
+  return Json{
+      {"ok", true},
+      {"mimeType", mime_type},
+      {"width", width},
+      {"height", height},
+      {"image_data", b64},
+      {"savePath", save_path},
+  };
+#else
+  return Json{{"error", "Screenshot capture not implemented on this OS"},
+              {"ok", false}};
+#endif
+}
+
+Json McpServer::ToolFind(const Json& args) {
+  const std::string query = args.value("query", "");
+  const bool case_sensitive = args.value("caseSensitive", false);
+  const int max_matches = args.value("maxMatches", 25);
+  const bool highlight = args.value("highlight", false);
+  const bool scroll_to = args.value("scrollTo", false);
+
+  if (query.empty()) {
+    return Json{
+        {"ok", true},
+        {"found", false},
+        {"count", 0},
+        {"matches", Json::array()},
+        {"message", "Empty search query"}
+    };
+  }
+
+  std::string expr =
+      "(function() {"
+      "  const query = " + Json(query).dump() + ";"
+      "  const caseSensitive = " + (case_sensitive ? "true" : "false") + ";"
+      "  const maxMatches = " + std::to_string(max_matches) + ";"
+      "  const doHighlight = " + (highlight ? "true" : "false") + ";"
+      "  const doScroll = " + (scroll_to ? "true" : "false") + ";"
+      R"JS(
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const textNodes = [];
+  let node;
+  const q = caseSensitive ? query : query.toLowerCase();
+  while ((node = walker.nextNode())) {
+    if (!node.nodeValue) continue;
+    const p = node.parentElement;
+    if (p && (p.tagName === "SCRIPT" || p.tagName === "STYLE" || p.tagName === "NOSCRIPT" || p.closest('#omni-find-host'))) continue;
+    const searchIn = caseSensitive ? node.nodeValue : node.nodeValue.toLowerCase();
+    if (searchIn.includes(q)) {
+      textNodes.push(node);
+    }
+  }
+
+  const matches = [];
+  let totalMatches = 0;
+
+  for (const n of textNodes) {
+    const text = n.nodeValue;
+    const searchIn = caseSensitive ? text : text.toLowerCase();
+    let idx = searchIn.indexOf(q);
+    if (idx === -1) continue;
+
+    const frag = doHighlight ? document.createDocumentFragment() : null;
+    let lastIdx = 0;
+
+    while (idx !== -1) {
+      totalMatches++;
+      if (matches.length < maxMatches) {
+        const start = Math.max(0, idx - 30);
+        const end = Math.min(text.length, idx + query.length + 30);
+        const snippet = (start > 0 ? "..." : "") + text.substring(start, end).trim() + (end < text.length ? "..." : "");
+        matches.push({ index: totalMatches, snippet: snippet });
+      }
+
+      if (doHighlight) {
+        if (idx > lastIdx) {
+          frag.appendChild(document.createTextNode(text.substring(lastIdx, idx)));
+        }
+        const mark = document.createElement('mark');
+        mark.className = 'omni-match';
+        mark.style.cssText = totalMatches === 1
+            ? 'background-color:#ff9800!important;color:#1a191a!important;outline:2px solid #e65100!important;border-radius:2px!important;padding:0 1px!important;'
+            : 'background-color:#ffe066!important;color:#1a191a!important;border-radius:2px!important;padding:0 1px!important;';
+        mark.textContent = text.substring(idx, idx + query.length);
+        frag.appendChild(mark);
+        lastIdx = idx + query.length;
+      }
+
+      idx = searchIn.indexOf(q, idx + query.length);
+    }
+
+    if (doHighlight) {
+      if (lastIdx < text.length) {
+        frag.appendChild(document.createTextNode(text.substring(lastIdx)));
+      }
+      if (n.parentNode) {
+        n.parentNode.replaceChild(frag, n);
+      }
+    }
+  }
+
+  if (doScroll) {
+    const firstMark = document.querySelector('mark.omni-match');
+    if (firstMark) {
+      try { firstMark.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch(e) {}
+    }
+  }
+
+  return {
+    ok: true,
+    found: totalMatches > 0,
+    count: totalMatches,
+    matches: matches,
+    url: location.href,
+    title: document.title
+  };
+})();
+)JS";
+
+  Json eval_args = args;
+  eval_args["expression"] = expr;
+  Json eval_res = ToolEvalJs(eval_args);
+  if (eval_res.is_object() && eval_res.contains("result") && eval_res["result"].is_object()) {
+    return eval_res["result"];
+  }
+  return eval_res;
+}
+
 void McpServer::TouchAgentSession(const std::string& agent_id,
                                   const std::string& name) {
   const std::string id = agent_id.empty() ? "mcp-agent" : agent_id;
@@ -1041,7 +1375,7 @@ Json McpServer::ExecuteTool(const std::string& name, const Json& args) {
       name == "browser_activate_tab" || name == "browser_close_tab" ||
       name == "browser_extract_content" || name == "browser_get_html" ||
       name == "browser_eval_js" || name == "browser_wait_for_load" ||
-      name == "browser_upload_file";
+      name == "browser_upload_file" || name == "browser_find";
   if (uses_page) {
     const int agent_count = std::max(1, leftover);
     RunOnUiAndWait([&]() {
@@ -1078,6 +1412,18 @@ Json McpServer::ExecuteTool(const std::string& name, const Json& args) {
   if (name == "browser_get_bookmarks") return ToolGetBookmarks(args);
   if (name == "browser_wait_for_load") return ToolWaitForLoad(args);
   if (name == "browser_status") return ToolStatus(args);
+  if (name == "browser_take_screenshot" || name == "browser_screenshot") {
+    return ToolTakeScreenshot(args);
+  }
+  if (name == "browser_find") return ToolFind(args);
+  if (name == "browser_toggle_find") {
+    RunOnUiAndWait([]() {
+      if (auto* handler = OmniHandler::GetInstance()) {
+        handler->ToggleFindBar();
+      }
+    });
+    return Json{{"ok", true}};
+  }
 
   return Json{{"error", "Unknown tool: " + name}};
 }
@@ -1211,6 +1557,23 @@ Json McpServer::HandleJsonRpcRequest(const Json& req, const std::string& agent_i
     const std::string tool_name = params.value("name", "");
     const Json arguments = params.value("arguments", Json::object());
     const Json exec_result = ExecuteTool(tool_name, arguments);
+
+    if (exec_result.contains("image_data") && exec_result["image_data"].is_string()) {
+      return Json{
+          {"jsonrpc", "2.0"},
+          {"id", id},
+          {"result",
+           {{"content",
+             {{{"type", "text"},
+               {"text", "Screenshot captured successfully (" +
+                            std::to_string(exec_result.value("width", 0)) + "x" +
+                            std::to_string(exec_result.value("height", 0)) +
+                            ")."}},
+              {{"type", "image"},
+               {"data", exec_result["image_data"].get<std::string>()},
+               {"mimeType", exec_result.value("mimeType", "image/png")}}}},
+            {"isError", false}}}};
+    }
 
     bool is_error = exec_result.contains("error") ||
                     (exec_result.contains("ok") && exec_result["ok"].is_boolean() &&

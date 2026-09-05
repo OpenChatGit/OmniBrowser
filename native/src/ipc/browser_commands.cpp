@@ -54,9 +54,10 @@ bool HandleBrowserCommand(
   const bool is_history = method.rfind("history.", 0) == 0;
   const bool is_bookmarks = method.rfind("bookmarks.", 0) == 0;
   const bool is_downloads = method.rfind("downloads.", 0) == 0;
+  const bool is_devtools = method.rfind("devtools.", 0) == 0;
   if (!owner ||
       (!is_browser && !is_overlay && !is_menu && !is_history && !is_bookmarks &&
-       !is_downloads)) {
+       !is_downloads && !is_devtools)) {
     return false;
   }
 
@@ -217,6 +218,63 @@ bool HandleBrowserCommand(
                                              : tab_id)},
                            {"playing", owner->content_audio_playing()}}
                           .dump());
+    return true;
+  }
+
+  if (method == "browser.find") {
+    const std::string text = params.value("text", "");
+    const bool forward = params.value("forward", true);
+    const bool match_case = params.value("matchCase", false);
+    const bool find_next = params.value("findNext", false);
+    auto view = owner->content_browser_view();
+    auto target_browser = view ? view->GetBrowser() : nullptr;
+    if (!target_browser || !target_browser->GetHost()) {
+      callback->Failure(404, "No active content browser");
+      return true;
+    }
+    target_browser->GetHost()->Find(text, forward, match_case, find_next);
+    callback->Success(Json{{"ok", true}}.dump());
+    return true;
+  }
+
+  if (method == "browser.stopFinding") {
+    const bool clear_selection = params.value("clearSelection", true);
+    auto view = owner->content_browser_view();
+    auto target_browser = view ? view->GetBrowser() : nullptr;
+    if (target_browser && target_browser->GetHost()) {
+      target_browser->GetHost()->StopFinding(clear_selection);
+    }
+    callback->Success(Json{{"ok", true}}.dump());
+    return true;
+  }
+
+  if (method == "browser.toggleFind") {
+    owner->ToggleFindBar();
+    callback->Success(Json{{"ok", true}}.dump());
+    return true;
+  }
+
+  if (method == "browser.showFind") {
+    owner->ShowFindBar();
+    callback->Success(Json{{"ok", true}}.dump());
+    return true;
+  }
+
+  if (method == "browser.hideFind") {
+    owner->HideFindBar();
+    callback->Success(Json{{"ok", true}}.dump());
+    return true;
+  }
+
+  if (method == "devtools.toggleDock") {
+    const bool docked = !owner->IsDevToolsDocked();
+    owner->SetDevToolsDocked(docked);
+    callback->Success(Json{{"ok", true}, {"docked", docked}}.dump());
+    return true;
+  }
+
+  if (method == "devtools.isDocked") {
+    callback->Success(Json{{"docked", owner->IsDevToolsDocked()}}.dump());
     return true;
   }
 

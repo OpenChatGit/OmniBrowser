@@ -150,6 +150,38 @@
     browserState() {
       return nativeQuery({ method: "browser.state", params: {} });
     },
+    browserFind(text, forward = true, matchCase = false, findNext = false) {
+      return nativeQuery({
+        method: "browser.find",
+        params: {
+          text: String(text || ""),
+          forward: Boolean(forward),
+          matchCase: Boolean(matchCase),
+          findNext: Boolean(findNext),
+        },
+      });
+    },
+    browserStopFinding(clearSelection = true) {
+      return nativeQuery({
+        method: "browser.stopFinding",
+        params: { clearSelection: Boolean(clearSelection) },
+      });
+    },
+    browserToggleFind() {
+      return nativeQuery({ method: "browser.toggleFind", params: {} });
+    },
+    browserShowFind() {
+      return nativeQuery({ method: "browser.showFind", params: {} });
+    },
+    browserHideFind() {
+      return nativeQuery({ method: "browser.hideFind", params: {} });
+    },
+    devtoolsToggleDock() {
+      return nativeQuery({ method: "devtools.toggleDock", params: {} });
+    },
+    devtoolsIsDocked() {
+      return nativeQuery({ method: "devtools.isDocked", params: {} });
+    },
     adblockGet(host) {
       const params = {};
       if (host) {

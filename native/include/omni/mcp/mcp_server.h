@@ -111,6 +111,8 @@ class McpServer {
   Json ToolGetBookmarks(const Json& args);
   Json ToolWaitForLoad(const Json& args);
   Json ToolStatus(const Json& args);
+  Json ToolTakeScreenshot(const Json& args);
+  Json ToolFind(const Json& args);
 
   void TouchAgentSession(const std::string& agent_id, const std::string& name);
   bool WaitForBrowserReady(std::chrono::milliseconds timeout);
