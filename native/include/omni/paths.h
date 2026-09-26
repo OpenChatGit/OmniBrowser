@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 namespace omni::paths {
@@ -37,6 +38,9 @@ std::string EnsureUserDownloadsDir();
 // Optional secondary process id (from --omni-instance=...). Empty = primary profile.
 void SetProfileInstanceId(const std::string& id);
 std::string ProfileInstanceId();
+
+// Monotonic-ish tick in milliseconds (GetTickCount64 / CLOCK_MONOTONIC).
+uint64_t NowTickMs();
 
 // Private window: isolated CEF profile, no visit history, wiped on exit.
 void SetPrivateMode(bool on);

@@ -7,9 +7,13 @@
 #include "omni/paths.h"
 #include "omni/utf8.h"
 
-#if defined(OS_WIN)
+#if defined(_WIN32)
 #include <windows.h>
 #include <shellapi.h>
+#else
+#include <cstdlib>
+#include <unistd.h>
+#include <filesystem>
 #endif
 
 namespace omni {
@@ -19,7 +23,7 @@ bool OpenPath(const std::string& path, bool select_in_folder) {
   if (path.empty()) {
     return false;
   }
-#if defined(OS_WIN)
+#if defined(_WIN32)
   const std::wstring wide = utf8::Widen(path);
   if (select_in_folder) {
     const std::wstring arg = L"/select,\"" + wide + L"\"";
@@ -33,8 +37,22 @@ bool OpenPath(const std::string& path, bool select_in_folder) {
                     SW_SHOWNORMAL);
   return reinterpret_cast<INT_PTR>(result) > 32;
 #else
-  (void)select_in_folder;
-  return false;
+  std::string target = path;
+  if (select_in_folder) {
+    const auto parent = std::filesystem::path(path).parent_path();
+    if (!parent.empty()) {
+      target = parent.string();
+    }
+  }
+  const pid_t pid = ::fork();
+  if (pid < 0) {
+    return false;
+  }
+  if (pid == 0) {
+    ::execlp("xdg-open", "xdg-open", target.c_str(), static_cast<char*>(nullptr));
+    _exit(127);
+  }
+  return true;
 #endif
 }
 

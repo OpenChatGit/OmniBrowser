@@ -1,6 +1,12 @@
 #include "omni/window_commands.h"
 
+#if defined(_WIN32)
 #include <windows.h>
+#else
+#include <cstdlib>
+#include <unistd.h>
+#include <gdk/gdk.h>
+#endif
 
 #include <climits>
 #include <fstream>
@@ -29,9 +35,13 @@ CefRefPtr<CefWindow> WindowForBrowser(CefRefPtr<CefBrowser> browser) {
   return nullptr;
 }
 
-std::wstring MakeInstanceId() {
-  return std::to_wstring(GetTickCount64()) + L"x" +
-         std::to_wstring(GetCurrentProcessId());
+std::string MakeInstanceId() {
+  return std::to_string(paths::NowTickMs()) + "x" +
+#if defined(_WIN32)
+         std::to_string(GetCurrentProcessId());
+#else
+         std::to_string(::getpid());
+#endif
 }
 
 Json ReadJsonFile(const std::string& path_utf8) {
@@ -69,21 +79,24 @@ void DeleteFileUtf8(const std::string& path_utf8) {
 }
 
 // Atomically claim a handshake file so only one process can consume it.
-bool ClaimFileUtf8(const std::string& path_utf8, std::wstring* claimed_out) {
-  const std::wstring src = utf8::Widen(path_utf8);
-  const std::wstring claim =
-      src + L".claim." + std::to_wstring(GetCurrentProcessId()) + L"." +
-      std::to_wstring(GetTickCount64());
-  if (!MoveFileW(src.c_str(), claim.c_str())) {
+bool ClaimFileUtf8(const std::string& path_utf8, std::string* claimed_out) {
+  const auto src = std::filesystem::path(utf8::Widen(path_utf8));
+  const std::string claim_utf8 =
+      path_utf8 + ".claim." + MakeInstanceId();
+  const auto claim = std::filesystem::path(utf8::Widen(claim_utf8));
+  std::error_code ec;
+  std::filesystem::rename(src, claim, ec);
+  if (ec) {
     return false;
   }
   if (claimed_out) {
-    *claimed_out = claim;
+    *claimed_out = claim_utf8;
   }
   return true;
 }
 
 bool LaunchNewAppInstance(bool private_window, std::string* error) {
+#if defined(_WIN32)
   wchar_t module[MAX_PATH];
   const DWORD len = GetModuleFileNameW(nullptr, module, MAX_PATH);
   if (len == 0 || len >= MAX_PATH) {
@@ -94,7 +107,7 @@ bool LaunchNewAppInstance(bool private_window, std::string* error) {
   }
 
   const std::wstring instance =
-      (private_window ? L"p" : L"") + MakeInstanceId();
+      utf8::Widen((private_window ? "p" : "") + MakeInstanceId());
   std::wstring cmd = L"\"";
   cmd += module;
   cmd += L"\" --omni-instance=";
@@ -103,7 +116,6 @@ bool LaunchNewAppInstance(bool private_window, std::string* error) {
     cmd += L" --omni-private";
   }
 
-  // CreateProcess needs a writable command-line buffer.
   std::vector<wchar_t> cmd_buf(cmd.begin(), cmd.end());
   cmd_buf.push_back(L'\0');
 
@@ -123,6 +135,37 @@ bool LaunchNewAppInstance(bool private_window, std::string* error) {
   CloseHandle(pi.hThread);
   CloseHandle(pi.hProcess);
   return true;
+#else
+  char module[4096];
+  const ssize_t len = ::readlink("/proc/self/exe", module, sizeof(module) - 1);
+  if (len <= 0) {
+    if (error) {
+      *error = "Failed to resolve executable path";
+    }
+    return false;
+  }
+  module[len] = '\0';
+  const std::string instance = (private_window ? "p" : "") + MakeInstanceId();
+  const std::string instance_arg = "--omni-instance=" + instance;
+  const pid_t pid = ::fork();
+  if (pid < 0) {
+    if (error) {
+      *error = "fork failed";
+    }
+    return false;
+  }
+  if (pid == 0) {
+    if (private_window) {
+      ::execl(module, module, instance_arg.c_str(), "--omni-private",
+              static_cast<char*>(nullptr));
+    } else {
+      ::execl(module, module, instance_arg.c_str(),
+              static_cast<char*>(nullptr));
+    }
+    _exit(127);
+  }
+  return true;
+#endif
 }
 
 bool ValidTabPayload(const Json& tab) {
@@ -151,14 +194,14 @@ bool HandleWindowCommand(
       callback->Success(Json{{"ok", true}, {"tab", nullptr}}.dump());
       return true;
     }
-    std::wstring claimed;
+    std::string claimed;
     if (!ClaimFileUtf8(paths::PendingOpenTabPath(), &claimed)) {
       callback->Success(Json{{"ok", true}, {"tab", nullptr}}.dump());
       return true;
     }
-    const Json pending = ReadJsonFile(utf8::Narrow(claimed));
+    const Json pending = ReadJsonFile(claimed);
     std::error_code ec;
-    std::filesystem::remove(std::filesystem::path(claimed), ec);
+    std::filesystem::remove(std::filesystem::path(utf8::Widen(claimed)), ec);
     if (!pending.is_object() || !ValidTabPayload(pending.value("tab", Json()))) {
       callback->Success(Json{{"ok", true}, {"tab", nullptr}}.dump());
       return true;
@@ -170,6 +213,7 @@ bool HandleWindowCommand(
   }
 
   if (method == "window.cursorPos") {
+#if defined(_WIN32)
     POINT pt = {};
     if (!GetCursorPos(&pt)) {
       callback->Failure(500, "GetCursorPos failed");
@@ -182,6 +226,23 @@ bool HandleWindowCommand(
                            {"y", pt.y},
                            {"primaryDown", primary_down}}
                           .dump());
+#else
+    int x = 0;
+    int y = 0;
+    const bool primary_down = false;
+    if (GdkDisplay* display = gdk_display_get_default()) {
+      if (GdkSeat* seat = gdk_display_get_default_seat(display)) {
+        if (GdkDevice* pointer = gdk_seat_get_pointer(seat)) {
+          gdk_device_get_position(pointer, nullptr, &x, &y);
+        }
+      }
+    }
+    callback->Success(Json{{"ok", true},
+                           {"x", x},
+                           {"y", y},
+                           {"primaryDown", primary_down}}
+                          .dump());
+#endif
     return true;
   }
 

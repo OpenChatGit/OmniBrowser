@@ -1,6 +1,6 @@
 # Omni Browser
 
-Desktop browser for **Windows** today: **C++** host + **CEF** (Chromium). No Electron, no Tauri. Linux is not supported yet — see [Building on Linux](#building-on-linux).
+Desktop browser: **C++** host + **CEF** (Chromium). No Electron, no Tauri. **Windows** and **Linux** (including WSL2 + WSLg).
 
 Default search is **QuBrain Search**. Chrome, tabs, start page, private windows, and library pages (History, Bookmarks, Downloads) live in this repo.
 
@@ -12,10 +12,10 @@ Native **MCP (Model Context Protocol)** and **ACP (Agent Control Protocol)** ser
 
 | Tool | Why |
 |------|-----|
-| Windows 10/11 **x64** | Only supported platform |
+| Windows 10/11 **x64**, or **Linux x64** (Ubuntu/Debian or WSL2) | Host platforms |
 | [CMake](https://cmake.org/download/) **3.21+** | Configure the build (`cmake` on `PATH`) |
-| **Visual Studio 2022 or 2026** with the **Desktop development with C++** workload | MSVC compiler (`cl`) |
-| **Ninja** | Fast generator used below. Ships with VS (`vcvars64` puts it on `PATH`) or install separately |
+| **Windows:** Visual Studio 2022/2026 with **Desktop development with C++**. **Linux/WSL:** `build-essential` | C++ compiler |
+| **Ninja** | Fast generator |
 | [Rust](https://rustup.rs/) stable (`cargo` / `rustc` on `PATH`) | Brave **adblock-rust** static library |
 | ~**2 GB** free disk | CEF binary download + build |
 
@@ -141,73 +141,64 @@ Do not copy only `OmniBrowser.exe` to another directory without the accompanying
 
 ---
 
-## Building on Linux
+## Building on Linux / WSL
 
-**Not supported yet.** The native host is Win32 (`main_win.cpp`, `CreateProcess`, `%APPDATA%`, MSVC `.lib` names, `add_executable(... WIN32)`). A Linux build will not configure or link as-is.
+The native host is cross-platform. On Windows, use a real Linux distro in WSL2 (Ubuntu), not the Docker Desktop VM. WSLg is needed to show the window.
 
-When the host is ported, the intended flow is the same as Windows: CEF binary + CMake/Ninja + Rust, then run from the output directory.
+From PowerShell:
 
-### What you would install
+```powershell
+wsl -d Ubuntu -- bash -lc 'cd /mnt/c/Users/Nicol/Documents/Github/browser && bash scripts/setup_wsl.sh && bash scripts/build_linux.sh'
+```
 
-Ubuntu / Debian example:
+Or inside WSL, from the repo root:
+
+```bash
+bash scripts/setup_wsl.sh
+bash scripts/build_linux.sh
+cd build-linux/native/Release   # or build-linux/native/
+./OmniBrowser
+```
+
+`setup_wsl.sh` installs CMake, Ninja, GTK 3, X11, NSS, and Rust. `build_linux.sh` downloads **linux64** CEF into `third_party/cef-linux64` (kept separate from the Windows CEF tree) and builds with Ninja.
+
+Start from the folder that contains `libcef.so`, the `.pak` files, and `ui/`. Same rule as Windows.
+
+Building on `/mnt/c/...` works but is slower than a clone on the Linux filesystem (`~/src`).
+
+### Dependencies (Ubuntu / Debian)
 
 ```bash
 sudo apt update
 sudo apt install -y \
   build-essential cmake ninja-build pkg-config \
-  libgtk-3-dev libnss3-dev libxss1 libasound2-dev \
+  libgtk-3-dev libnss3-dev libxss-dev libasound2-dev \
   libx11-dev libxcomposite-dev libxdamage-dev libxrandr-dev \
   libgbm-dev libpango1.0-dev libatk1.0-dev libcups2-dev \
-  curl tar
+  curl tar zenity
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source "$HOME/.cargo/env"
 ```
 
 CEF Views on Linux needs GTK 3. Other distros: equivalent `-dev` packages for GTK, NSS, X11, GBM, ALSA.
 
-### What you would download
-
-Same CEF version as Windows, **linux64** (or `linuxarm64` on ARM):
+### CEF download
 
 ```bash
-# Version must match scripts/download_cef.ps1
-VER="144.0.32+g5ce7d26+chromium-144.0.7559.258"
-FILE="cef_binary_${VER}_linux64.tar.bz2"
-URL="https://cef-builds.spotifycdn.com/$(python3 -c "import urllib.parse; print(urllib.parse.quote('''$FILE''', safe=''))")"
-mkdir -p third_party
-curl -L --retry 3 -o "third_party/$FILE" "$URL"
-mkdir -p third_party/cef_extract
-tar -xjf "third_party/$FILE" -C third_party/cef_extract
-mv third_party/cef_extract/cef_binary_* third_party/cef
-rm -rf third_party/cef_extract
+bash scripts/download_cef.sh
+# optional: bash scripts/download_cef.sh "<same version as download_cef.ps1>" linuxarm64
 ```
 
-Or extend `scripts/download_cef.ps1` / add `scripts/download_cef.sh` with `-Platform linux64`.
-
-### What you would configure and run
+### Configure and run
 
 ```bash
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_SANDBOX=OFF
-cmake --build build --target OmniBrowser
-cd build/native/Release   # or build/native/ — CEF Linux layout may differ
+cmake -S . -B build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release -DUSE_SANDBOX=OFF
+cmake --build build-linux --target OmniBrowser
+cd build-linux/native/Release
 ./OmniBrowser
 ```
 
-Start from the folder that contains `libcef.so`, the `.pak` files, and `ui/`. Same rule as Windows.
-
-### What has to be ported first
-
-| Area | Today (Windows) | Linux needs |
-|------|-----------------|-------------|
-| Entry | `native/src/main_win.cpp` (`wWinMain`) | `main()` + `CefExecuteProcess` / `CefInitialize` |
-| CMake | `add_executable(... WIN32)`, `*.lib`, `comdlg32` / `winhttp` | No `WIN32`, `libomni_adblock_ffi.a`, no Win32 libs |
-| Paths / log | `%APPDATA%\OmniBrowser`, `GetModuleFileNameW` | `~/.local/share/OmniBrowser` (or `$XDG_DATA_HOME`) |
-| UTF-16 helpers | `utf8.cpp` via `WideCharToMultiByte` | UTF-8 paths, or `std::filesystem` |
-| New window / private | `CreateProcessW` + `--omni-instance` | `fork`/`exec` of `$0` with the same flags |
-| File dialogs, terminal, game launch | Win32 / PowerShell | GTK/portal dialogs; optional later |
-| Adblock FFI | CMake expects `omni_adblock_ffi.lib` | `libomni_adblock_ffi.a` from cargo |
-
-The HTML/CSS/JS under `ui/` is already cross-platform. Most of the CEF Views host (`omni_app.cpp`, `omni_handler.cpp`) can stay; the Win32 edges above are the work.
+Linux-specific pieces: `main_linux.cpp`, POSIX pty terminal, XDG data dir (`~/.local/share/OmniBrowser`), `xdg-open`, zenity file picker. The Win32 AI HUD overlay and native menu hooks stay Windows-only; the HTML/CSS/JS under `ui/` is shared.
 
 ---
 
@@ -260,7 +251,7 @@ Omni embeds Brave’s open-source **adblock-rust** engine (network + cosmetics, 
 - Network blocking via CEF `OnBeforeResourceLoad` (content tabs only)
 - Cosmetic hide CSS on the main frame (`OnLoadStart` / `OnLoadEnd`)
 - Redirect resources (`noop.js`, transparent pixels, Brave resource pack, …)
-- Bundled baseline; EasyList / EasyPrivacy in `%APPDATA%\OmniBrowser\adblock\`; Fanboy when aggressive
+- Bundled baseline; EasyList / EasyPrivacy in the Omni data dir (`%APPDATA%\OmniBrowser\adblock\` or `~/.local/share/OmniBrowser/adblock/`); Fanboy when aggressive
 - Shield in the omnibox; app menu toggles for global / aggressive
 
 See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for MPL-2.0 attribution.
@@ -279,7 +270,7 @@ See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for MPL-2.0 attribution.
 
 | Layer | Tech |
 |--------|------|
-| Host | C++17, Win32, CEF |
+| Host | C++17, CEF (Win32 + Linux/GTK) |
 | UI shell | CEF Views + vanilla HTML/CSS/JS |
 | IPC | `cefQuery` → **ApiDispatcher** registry |
 | Search | Cloudflare Worker (`workers/omni-search`) |

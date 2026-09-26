@@ -27,8 +27,13 @@ set(OMNI_ADBLOCK_FFI_TARGET_DIR "${CMAKE_CURRENT_BINARY_DIR}/adblock_ffi_target"
 # Always release for the adblock staticlib (perf + smaller deps). Multi-config
 # generators (Visual Studio) leave CMAKE_BUILD_TYPE empty.
 set(OMNI_ADBLOCK_PROFILE "release")
-set(OMNI_ADBLOCK_LIB
-  "${OMNI_ADBLOCK_FFI_TARGET_DIR}/${OMNI_ADBLOCK_PROFILE}/omni_adblock_ffi.lib")
+if(WIN32)
+  set(OMNI_ADBLOCK_LIB
+    "${OMNI_ADBLOCK_FFI_TARGET_DIR}/${OMNI_ADBLOCK_PROFILE}/omni_adblock_ffi.lib")
+else()
+  set(OMNI_ADBLOCK_LIB
+    "${OMNI_ADBLOCK_FFI_TARGET_DIR}/${OMNI_ADBLOCK_PROFILE}/libomni_adblock_ffi.a")
+endif()
 add_custom_command(
   OUTPUT "${OMNI_ADBLOCK_LIB}"
   COMMAND ${CMAKE_COMMAND} -E env
@@ -50,8 +55,14 @@ set_target_properties(omni_adblock_ffi PROPERTIES
 )
 add_dependencies(omni_adblock_ffi omni_adblock_ffi_build)
 
+if(WIN32)
+  set(OMNI_MAIN_SRC src/main_win.cpp)
+else()
+  set(OMNI_MAIN_SRC src/main_linux.cpp)
+endif()
+
 set(OMNI_SRCS
-  src/main_win.cpp
+  ${OMNI_MAIN_SRC}
   src/app/omni_app.cpp
   src/app/omni_handler.cpp
   src/app/ai_hud.cpp
@@ -106,7 +117,11 @@ if(WIN32)
   list(APPEND OMNI_SRCS win/app.rc)
 endif()
 
-add_executable(${OMNI_TARGET} WIN32 ${OMNI_SRCS})
+if(WIN32)
+  add_executable(${OMNI_TARGET} WIN32 ${OMNI_SRCS})
+else()
+  add_executable(${OMNI_TARGET} ${OMNI_SRCS})
+endif()
 SET_EXECUTABLE_TARGET_PROPERTIES(${OMNI_TARGET})
 add_dependencies(${OMNI_TARGET} libcef_dll_wrapper omni_adblock_ffi)
 
@@ -118,10 +133,11 @@ target_include_directories(${OMNI_TARGET} PRIVATE
 )
 
 target_compile_definitions(${OMNI_TARGET} PRIVATE
-  UNICODE
-  _UNICODE
   JSON_NOEXCEPTION=1
 )
+if(WIN32)
+  target_compile_definitions(${OMNI_TARGET} PRIVATE UNICODE _UNICODE)
+endif()
 
 target_link_libraries(${OMNI_TARGET}
   libcef_lib
@@ -129,18 +145,42 @@ target_link_libraries(${OMNI_TARGET}
   omni_sqlite
   omni_adblock_ffi
   ${CEF_STANDARD_LIBS}
-  comdlg32
-  comctl32
-  winhttp
-  ws2_32
-  userenv
-  ntdll
-  bcrypt
-  iphlpapi
-  gdiplus
 )
-
-ADD_WINDOWS_MANIFEST("${CMAKE_CURRENT_SOURCE_DIR}/win" "${OMNI_TARGET}" "exe")
+if(WIN32)
+  target_link_libraries(${OMNI_TARGET}
+    comdlg32
+    comctl32
+    winhttp
+    ws2_32
+    userenv
+    ntdll
+    bcrypt
+    iphlpapi
+    gdiplus
+  )
+  ADD_WINDOWS_MANIFEST("${CMAKE_CURRENT_SOURCE_DIR}/win" "${OMNI_TARGET}" "exe")
+else()
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(GTK3 REQUIRED gtk+-3.0)
+  target_include_directories(${OMNI_TARGET} PRIVATE ${GTK3_INCLUDE_DIRS})
+  target_compile_options(${OMNI_TARGET} PRIVATE ${GTK3_CFLAGS_OTHER})
+  target_link_libraries(${OMNI_TARGET}
+    ${GTK3_LIBRARIES}
+    pthread
+    dl
+    m
+    X11
+    util
+  )
+  set_target_properties(${OMNI_TARGET} PROPERTIES
+    INSTALL_RPATH "$ORIGIN"
+    BUILD_RPATH "$ORIGIN"
+    BUILD_WITH_INSTALL_RPATH TRUE
+  )
+  if(COMMAND SET_LINUX_SUID_PERMISSIONS)
+    SET_LINUX_SUID_PERMISSIONS("${OMNI_TARGET}" "${CEF_TARGET_OUT_DIR}/chrome-sandbox")
+  endif()
+endif()
 
 COPY_FILES("${OMNI_TARGET}" "${CEF_BINARY_FILES}" "${CEF_BINARY_DIR}" "${CEF_TARGET_OUT_DIR}")
 COPY_FILES("${OMNI_TARGET}" "${CEF_RESOURCE_FILES}" "${CEF_RESOURCE_DIR}" "${CEF_TARGET_OUT_DIR}")

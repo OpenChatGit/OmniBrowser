@@ -3,17 +3,26 @@
 #include <filesystem>
 #include <vector>
 
+#if defined(_WIN32)
 #include "omni/utf8.h"
+#else
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 namespace omni {
 
 GameLauncher::~GameLauncher() {
   std::lock_guard lock(mu_);
+#if defined(_WIN32)
   for (auto& [id, proc] : running_) {
     if (proc.handle) {
       CloseHandle(proc.handle);
     }
   }
+#else
+  (void)running_;
+#endif
   running_.clear();
 }
 
@@ -27,6 +36,7 @@ std::string GameLauncher::Launch(int64_t game_id,
     return "Game is already running";
   }
 
+#if defined(_WIN32)
   const std::wstring exe_w = utf8::Widen(exe_path);
   std::wstring cwd_w = utf8::Widen(working_dir);
   if (cwd_w.empty()) {
@@ -57,12 +67,35 @@ std::string GameLauncher::Launch(int64_t game_id,
     running_[game_id] = Proc{pi.hProcess, pi.dwProcessId};
   }
   return {};
+#else
+  std::string cwd = working_dir;
+  if (cwd.empty()) {
+    cwd = std::filesystem::path(exe_path).parent_path().string();
+  }
+  const pid_t pid = ::fork();
+  if (pid < 0) {
+    return "fork failed";
+  }
+  if (pid == 0) {
+    if (!cwd.empty()) {
+      ::chdir(cwd.c_str());
+    }
+    ::execl(exe_path.c_str(), exe_path.c_str(), static_cast<char*>(nullptr));
+    _exit(127);
+  }
+  {
+    std::lock_guard lock(mu_);
+    running_[game_id] = Proc{pid};
+  }
+  return {};
+#endif
 }
 
 std::vector<int64_t> GameLauncher::PollExits() {
   std::vector<int64_t> stopped;
   std::lock_guard lock(mu_);
   for (auto it = running_.begin(); it != running_.end();) {
+#if defined(_WIN32)
     DWORD code = 0;
     if (GetExitCodeProcess(it->second.handle, &code) && code != STILL_ACTIVE) {
       CloseHandle(it->second.handle);
@@ -71,6 +104,16 @@ std::vector<int64_t> GameLauncher::PollExits() {
     } else {
       ++it;
     }
+#else
+    int status = 0;
+    const pid_t r = ::waitpid(it->second.pid, &status, WNOHANG);
+    if (r == it->second.pid || (r < 0)) {
+      stopped.push_back(it->first);
+      it = running_.erase(it);
+    } else {
+      ++it;
+    }
+#endif
   }
   return stopped;
 }

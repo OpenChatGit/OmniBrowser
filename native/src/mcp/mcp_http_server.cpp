@@ -1,10 +1,18 @@
 #include "omni/mcp/mcp_server.h"
 
-#include <winsock2.h>
-#include <ws2tcpip.h>
+#include "omni/net_compat.h"
+
+#if defined(_WIN32)
 #include <windows.h>
 #include <iphlpapi.h>
 #include <tlhelp32.h>
+#else
+#include <csignal>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <chrono>
@@ -21,12 +29,26 @@
 #include <vector>
 
 #include "omni/log.h"
+#include "omni/paths.h"
+#include "omni/utf8.h"
 
+#if defined(_WIN32)
 #pragma comment(lib, "ws2_32.lib")
+#endif
 
 namespace omni {
 
 namespace {
+
+#if !defined(_WIN32)
+using DWORD = unsigned long;
+inline DWORD GetCurrentProcessId() {
+  return static_cast<DWORD>(::getpid());
+}
+inline void Sleep(DWORD ms) {
+  std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+}
+#endif
 
 struct SseSession {
   SOCKET socket = INVALID_SOCKET;
@@ -69,22 +91,20 @@ void SendHttpResponse(SOCKET client,
   SendAll(client, oss.str());
 }
 
-std::wstring OmniAppDataDirW() {
-  wchar_t appdata[MAX_PATH] = {};
-  if (GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH) == 0) {
-    return {};
-  }
-  return std::wstring(appdata) + L"\\OmniBrowser";
-}
-
-std::wstring EndpointFilePathW() {
-  return OmniAppDataDirW() + L"\\mcp-endpoint.json";
+std::string EndpointFilePath() {
+  return paths::EnsureAppDataDir() +
+#if defined(_WIN32)
+         "\\mcp-endpoint.json";
+#else
+         "/mcp-endpoint.json";
+#endif
 }
 
 bool ProcessAlive(DWORD pid) {
   if (pid == 0) {
     return false;
   }
+#if defined(_WIN32)
   HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
   if (!proc) {
     return false;
@@ -93,18 +113,27 @@ bool ProcessAlive(DWORD pid) {
   const BOOL ok = GetExitCodeProcess(proc, &exit_code);
   CloseHandle(proc);
   return ok && exit_code == STILL_ACTIVE;
+#else
+  return ::kill(static_cast<pid_t>(pid), 0) == 0;
+#endif
 }
 
-bool PathIsOmniBrowserExe(const wchar_t* path) {
-  if (!path || !path[0]) {
+bool PathIsOmniBrowser(const std::string& path) {
+  if (path.empty()) {
     return false;
   }
-  const wchar_t* slash = wcsrchr(path, L'\\');
-  const wchar_t* name = slash ? slash + 1 : path;
-  return _wcsicmp(name, L"OmniBrowser.exe") == 0;
+  const auto slash = path.find_last_of("/\\");
+  const std::string name =
+      slash == std::string::npos ? path : path.substr(slash + 1);
+#if defined(_WIN32)
+  return _stricmp(name.c_str(), "OmniBrowser.exe") == 0;
+#else
+  return name == "OmniBrowser";
+#endif
 }
 
 bool PidIsOmniBrowser(DWORD pid) {
+#if defined(_WIN32)
   HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
   if (!proc) {
     return false;
@@ -113,9 +142,20 @@ bool PidIsOmniBrowser(DWORD pid) {
   DWORD n = MAX_PATH;
   const BOOL ok = QueryFullProcessImageNameW(proc, 0, path, &n);
   CloseHandle(proc);
-  return ok && PathIsOmniBrowserExe(path);
+  return ok && PathIsOmniBrowser(utf8::Narrow(path));
+#else
+  char buf[4096];
+  const std::string link = "/proc/" + std::to_string(pid) + "/exe";
+  const ssize_t len = ::readlink(link.c_str(), buf, sizeof(buf) - 1);
+  if (len <= 0) {
+    return false;
+  }
+  buf[len] = '\0';
+  return PathIsOmniBrowser(buf);
+#endif
 }
 
+#if defined(_WIN32)
 struct FindGuiState {
   DWORD skip_pid = 0;
   DWORD found_pid = 0;
@@ -167,16 +207,20 @@ bool GuiMutexHeld() {
   CloseHandle(mutex);
   return true;
 }
+#else
+DWORD FindOmniGuiPid() {
+  return 0;
+}
+
+bool GuiMutexHeld() {
+  return false;
+}
+#endif
 
 void WriteEndpointFile(int port) {
-  const std::wstring dir = OmniAppDataDirW();
-  if (dir.empty()) {
-    return;
-  }
-  CreateDirectoryW(dir.c_str(), nullptr);
-  const std::wstring path = EndpointFilePathW();
-  FILE* fp = nullptr;
-  if (_wfopen_s(&fp, path.c_str(), L"wb") != 0 || !fp) {
+  const std::string path = EndpointFilePath();
+  FILE* fp = std::fopen(path.c_str(), "wb");
+  if (!fp) {
     return;
   }
   std::fprintf(fp, "{\"port\":%d,\"pid\":%lu}\n", port,
@@ -185,15 +229,15 @@ void WriteEndpointFile(int port) {
 }
 
 void ClearEndpointFile() {
-  const std::wstring path = EndpointFilePathW();
+  const std::string path = EndpointFilePath();
   if (path.empty()) {
     return;
   }
-  DeleteFileW(path.c_str());
+  std::remove(path.c_str());
 }
 
 bool ReadEndpointFile(int* port, DWORD* pid) {
-  const std::wstring path = EndpointFilePathW();
+  const std::string path = EndpointFilePath();
   if (path.empty()) {
     return false;
   }
@@ -498,16 +542,15 @@ bool McpServer::StartHttpServer(int port) {
   }
   Initialize();
 
-  WSADATA wsaData;
-  if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-    Log("McpServer: WSAStartup failed");
+  if (!NetStartup()) {
+    Log("McpServer: network startup failed");
     return false;
   }
 
   SOCKET listen_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (listen_sock == INVALID_SOCKET) {
     Log("McpServer: Failed to create socket");
-    WSACleanup();
+    NetCleanup();
     return false;
   }
 
@@ -529,16 +572,16 @@ bool McpServer::StartHttpServer(int port) {
   }
   if (bind_ok == SOCKET_ERROR) {
     Log("McpServer: Failed to bind to 127.0.0.1:" + std::to_string(port) +
-        " (WSAGetLastError=" + std::to_string(WSAGetLastError()) + ")");
+        " (error=" + std::to_string(WSAGetLastError()) + ")");
     closesocket(listen_sock);
-    WSACleanup();
+    NetCleanup();
     return false;
   }
 
   if (listen(listen_sock, SOMAXCONN) == SOCKET_ERROR) {
     Log("McpServer: Failed to listen on socket");
     closesocket(listen_sock);
-    WSACleanup();
+    NetCleanup();
     return false;
   }
 
@@ -552,7 +595,11 @@ bool McpServer::StartHttpServer(int port) {
   http_thread_ = std::make_unique<std::thread>([this, listen_sock]() {
     while (http_running_) {
       sockaddr_in client_addr{};
+#if defined(_WIN32)
       int client_len = sizeof(client_addr);
+#else
+      socklen_t client_len = sizeof(client_addr);
+#endif
       SOCKET client = accept(listen_sock, reinterpret_cast<sockaddr*>(&client_addr), &client_len);
       if (client == INVALID_SOCKET) {
         if (!http_running_) break;
@@ -592,7 +639,7 @@ void McpServer::StopHttpServer() {
     g_sse_sessions.clear();
   }
 
-  WSACleanup();
+  NetCleanup();
   ClearEndpointFile();
   Log("McpServer: HTTP Server stopped.");
 }
@@ -608,7 +655,7 @@ void McpServer::StartStdioServer() {
 
   stdio_thread_ = std::make_unique<std::thread>([this]() {
     const std::string stdio_agent =
-        "stdio-" + std::to_string(::GetCurrentProcessId());
+        "stdio-" + std::to_string(GetCurrentProcessId());
     std::string line;
     while (stdio_running_ && std::getline(std::cin, line)) {
       if (line.empty()) continue;
@@ -637,22 +684,30 @@ bool McpServer::IsHttpReachable(int port, int timeout_ms) {
   if (port <= 0) {
     return false;
   }
-  WSADATA wsaData;
-  const bool started = WSAStartup(MAKEWORD(2, 2), &wsaData) == 0;
+  const bool started = NetStartup();
 
   SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
   if (s == INVALID_SOCKET) {
     if (started) {
-      WSACleanup();
+      NetCleanup();
     }
     return false;
   }
 
+#if defined(_WIN32)
   DWORD timeout = static_cast<DWORD>(std::max(80, timeout_ms));
   setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout),
              sizeof(timeout));
   setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&timeout),
              sizeof(timeout));
+#else
+  timeval timeout{};
+  const int ms = std::max(80, timeout_ms);
+  timeout.tv_sec = ms / 1000;
+  timeout.tv_usec = (ms % 1000) * 1000;
+  setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+  setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+#endif
 
   sockaddr_in addr{};
   addr.sin_family = AF_INET;
@@ -663,7 +718,7 @@ bool McpServer::IsHttpReachable(int port, int timeout_ms) {
       SOCKET_ERROR) {
     closesocket(s);
     if (started) {
-      WSACleanup();
+      NetCleanup();
     }
     return false;
   }
@@ -675,7 +730,7 @@ bool McpServer::IsHttpReachable(int port, int timeout_ms) {
   const int n = recv(s, buf, sizeof(buf) - 1, 0);
   closesocket(s);
   if (started) {
-    WSACleanup();
+    NetCleanup();
   }
   if (n <= 0) {
     return GuiAlreadyOpen(nullptr);
@@ -688,6 +743,7 @@ bool McpServer::IsHttpReachable(int port, int timeout_ms) {
   return GuiAlreadyOpen(nullptr);
 }
 
+#if defined(_WIN32)
 bool McpServer::FocusExistingGuiWindow() {
   HWND hwnd = nullptr;
   DWORD pid = 0;
@@ -743,7 +799,7 @@ void McpServer::TerminateStaleGuiProcesses() {
   if (Process32FirstW(snapshot, &entry)) {
     do {
       if (entry.th32ProcessID != current_pid &&
-          PathIsOmniBrowserExe(entry.szExeFile)) {
+          PathIsOmniBrowser(utf8::Narrow(entry.szExeFile))) {
         HANDLE proc = OpenProcess(PROCESS_TERMINATE, FALSE, entry.th32ProcessID);
         if (proc) {
           Log("Terminating stale/headless OmniBrowser process pid=" +
@@ -756,6 +812,7 @@ void McpServer::TerminateStaleGuiProcesses() {
   }
   CloseHandle(snapshot);
 }
+#endif
 
 namespace {
 
@@ -767,6 +824,7 @@ struct HttpRpcResult {
 };
 
 std::string ReadRecentCrashFile() {
+#if defined(_WIN32)
   wchar_t appdata[MAX_PATH] = {};
   if (GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH) == 0) {
     return {};
@@ -792,6 +850,25 @@ std::string ReadRecentCrashFile() {
     }
   }
   return {};
+#else
+  const std::string crash_path = paths::AppDataDir() + "/last_crash.txt";
+  struct stat st {};
+  if (::stat(crash_path.c_str(), &st) != 0) {
+    return {};
+  }
+  const auto now = std::chrono::system_clock::now();
+  const auto mtime = std::chrono::system_clock::from_time_t(st.st_mtime);
+  const auto age_s =
+      std::chrono::duration_cast<std::chrono::seconds>(now - mtime).count();
+  if (age_s <= 180) {
+    std::ifstream in(crash_path);
+    std::string line;
+    if (in && std::getline(in, line) && !line.empty()) {
+      return line;
+    }
+  }
+  return {};
+#endif
 }
 
 std::string LastCrashHint() {
@@ -803,6 +880,7 @@ std::string LastCrashHint() {
 }
 
 DWORD FindListenerPid(int port) {
+#if defined(_WIN32)
   DWORD size = 0;
   GetExtendedTcpTable(nullptr, &size, FALSE, AF_INET, TCP_TABLE_OWNER_PID_LISTENER,
                       0);
@@ -823,8 +901,18 @@ DWORD FindListenerPid(int port) {
     }
   }
   return 0;
+#else
+  (void)port;
+  DWORD pid = 0;
+  int stored_port = 0;
+  if (ReadEndpointFile(&stored_port, &pid) && stored_port == port) {
+    return pid;
+  }
+  return 0;
+#endif
 }
 
+#if defined(_WIN32)
 bool ProcessExited(HANDLE proc, DWORD* exit_code) {
   if (!proc || proc == INVALID_HANDLE_VALUE) {
     return false;
@@ -839,6 +927,20 @@ bool ProcessExited(HANDLE proc, DWORD* exit_code) {
   }
   return true;
 }
+#else
+bool ProcessExitedPid(DWORD pid, DWORD* exit_code) {
+  if (pid == 0) {
+    return false;
+  }
+  if (::kill(static_cast<pid_t>(pid), 0) == 0) {
+    return false;
+  }
+  if (exit_code) {
+    *exit_code = 1;
+  }
+  return true;
+}
+#endif
 
 Json ToolErrorResult(const Json& id, const std::string& message) {
   std::string text = message;
@@ -862,6 +964,7 @@ Json JsonRpcError(const Json& id, int code, const std::string& message) {
 }
 
 std::string ReadStdinLine(bool* eof) {
+#if defined(_WIN32)
   HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
   if (!in || in == INVALID_HANDLE_VALUE) {
     if (eof) {
@@ -888,9 +991,30 @@ std::string ReadStdinLine(bool* eof) {
     }
   }
   return line;
+#else
+  std::string line;
+  for (;;) {
+    char byte = 0;
+    const ssize_t n = ::read(STDIN_FILENO, &byte, 1);
+    if (n <= 0) {
+      if (eof) {
+        *eof = true;
+      }
+      break;
+    }
+    if (byte == '\n') {
+      break;
+    }
+    if (byte != '\r') {
+      line.push_back(byte);
+    }
+  }
+  return line;
+#endif
 }
 
 void WriteStdoutLine(const std::string& payload) {
+#if defined(_WIN32)
   HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
   if (!out || out == INVALID_HANDLE_VALUE) {
     return;
@@ -902,6 +1026,12 @@ void WriteStdoutLine(const std::string& payload) {
   }
   WriteFile(out, "\n", 1, &n, nullptr);
   FlushFileBuffers(out);
+#else
+  if (!payload.empty()) {
+    ::write(STDOUT_FILENO, payload.data(), payload.size());
+  }
+  ::write(STDOUT_FILENO, "\n", 1);
+#endif
 }
 
 bool LaunchBrowserGui() {
@@ -912,6 +1042,7 @@ bool LaunchBrowserGui() {
         ", not launching a second instance");
     return true;
   }
+#if defined(_WIN32)
   wchar_t exe[MAX_PATH] = {};
   if (GetModuleFileNameW(nullptr, exe, MAX_PATH) == 0) {
     return false;
@@ -947,6 +1078,24 @@ bool LaunchBrowserGui() {
   CloseHandle(pi.hThread);
   CloseHandle(pi.hProcess);
   return true;
+#else
+  char exe[4096];
+  const ssize_t len = ::readlink("/proc/self/exe", exe, sizeof(exe) - 1);
+  if (len <= 0) {
+    return false;
+  }
+  exe[len] = '\0';
+  const pid_t pid = ::fork();
+  if (pid < 0) {
+    return false;
+  }
+  if (pid == 0) {
+    ::setsid();
+    ::execl(exe, exe, static_cast<char*>(nullptr));
+    _exit(127);
+  }
+  return true;
+#endif
 }
 
 HttpRpcResult HttpPostMcp(int port, const std::string& body,
@@ -959,11 +1108,18 @@ HttpRpcResult HttpPostMcp(int port, const std::string& body,
                 std::to_string(out.winsock_error) + ")";
     return out;
   }
+#if defined(_WIN32)
   DWORD timeout = 30000;
   setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout),
              sizeof(timeout));
   setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&timeout),
              sizeof(timeout));
+#else
+  timeval timeout{};
+  timeout.tv_sec = 30;
+  setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+  setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
+#endif
 
   sockaddr_in addr{};
   addr.sin_family = AF_INET;
@@ -993,29 +1149,32 @@ HttpRpcResult HttpPostMcp(int port, const std::string& body,
   SendAll(s, req.str());
 
   const DWORD pid = FindListenerPid(port);
+#if defined(_WIN32)
   HANDLE proc = nullptr;
   if (pid) {
     proc = OpenProcess(SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION, FALSE,
                        pid);
   }
+#endif
 
   std::string raw;
   char buf[4096];
   int n = 0;
   int recv_err = 0;
   for (;;) {
-    fd_set read_set;
-    FD_ZERO(&read_set);
-    FD_SET(s, &read_set);
     timeval tv{};
     tv.tv_sec = 1;
     tv.tv_usec = 0;
-    const int sel = select(0, &read_set, nullptr, nullptr, &tv);
+    const int sel = omni::SelectRead(s, &tv);
     DWORD exit_code = 0;
+#if defined(_WIN32)
     if (ProcessExited(proc, &exit_code)) {
       if (proc) {
         CloseHandle(proc);
       }
+#else
+    if (ProcessExitedPid(pid, &exit_code)) {
+#endif
       closesocket(s);
       out.error = "OmniBrowser process exited during the tool call (PID " +
                   std::to_string(pid) + ", exit " + std::to_string(exit_code) +
@@ -1037,9 +1196,11 @@ HttpRpcResult HttpPostMcp(int port, const std::string& body,
     recv_err = (n == SOCKET_ERROR) ? WSAGetLastError() : 0;
     break;
   }
+#if defined(_WIN32)
   if (proc) {
     CloseHandle(proc);
   }
+#endif
   closesocket(s);
 
   const size_t sep = raw.find("\r\n\r\n");
@@ -1175,15 +1336,14 @@ bool EnsureBrowserForAgent(int* port, std::string* error) {
 }  // namespace
 
 int McpServer::RunStdioHost(int port) {
-  WSADATA wsaData;
-  if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+  if (!NetStartup()) {
     return 1;
   }
 
   Get().Initialize();
 
   const std::string agent_id =
-      "stdio-" + std::to_string(::GetCurrentProcessId());
+      "stdio-" + std::to_string(GetCurrentProcessId());
   DWORD found_gui = 0;
   const int live = ResolveLiveMcpPort(port);
   if (GuiAlreadyOpen(&found_gui)) {
@@ -1323,7 +1483,7 @@ int McpServer::RunStdioHost(int port) {
     WriteStdoutLine(proxied.dump());
   }
 
-  WSACleanup();
+  NetCleanup();
   return 0;
 }
 

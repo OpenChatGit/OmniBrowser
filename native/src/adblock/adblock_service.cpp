@@ -13,10 +13,12 @@
 #include "omni/utf8.h"
 #include "omni_adblock.h"
 
-#if defined(OS_WIN)
+#if defined(_WIN32)
 #include <windows.h>
 #include <winhttp.h>
 #pragma comment(lib, "winhttp.lib")
+#else
+#include <cstdio>
 #endif
 
 namespace omni {
@@ -94,12 +96,13 @@ std::string HostOf(const std::string& url) {
   return host;
 }
 
-#if defined(OS_WIN)
-bool HttpGet(const std::wstring& url, std::string* out) {
+bool HttpGet(const std::string& url, std::string* out) {
   if (!out) {
     return false;
   }
   out->clear();
+#if defined(_WIN32)
+  const std::wstring wide = utf8::Widen(url);
   URL_COMPONENTS parts{};
   parts.dwStructSize = sizeof(parts);
   wchar_t host[256] = {};
@@ -108,7 +111,7 @@ bool HttpGet(const std::wstring& url, std::string* out) {
   parts.dwHostNameLength = 256;
   parts.lpszUrlPath = path;
   parts.dwUrlPathLength = 2048;
-  if (!WinHttpCrackUrl(url.c_str(), 0, 0, &parts)) {
+  if (!WinHttpCrackUrl(wide.c_str(), 0, 0, &parts)) {
     return false;
   }
   HINTERNET session =
@@ -165,8 +168,30 @@ bool HttpGet(const std::wstring& url, std::string* out) {
   WinHttpCloseHandle(connect);
   WinHttpCloseHandle(session);
   return ok;
-}
+#else
+  std::string cmd = "curl -fsSL --max-time 60 --retry 2 -- ";
+  cmd += "'";
+  for (char c : url) {
+    if (c == '\'') {
+      cmd += "'\\''";
+    } else {
+      cmd += c;
+    }
+  }
+  cmd += "'";
+  FILE* pipe = popen(cmd.c_str(), "r");
+  if (!pipe) {
+    return false;
+  }
+  char chunk[4096];
+  size_t n = 0;
+  while ((n = std::fread(chunk, 1, sizeof(chunk), pipe)) > 0) {
+    out->append(chunk, n);
+  }
+  const int rc = pclose(pipe);
+  return rc == 0 && !out->empty();
 #endif
+}
 
 }  // namespace
 
@@ -737,7 +762,7 @@ bool AdblockService::LoadListsIntoEngineLocked() {
 namespace {
 
 struct ListJob {
-  const wchar_t* url;
+  const char* url;
   const char* filename;
 };
 
@@ -747,84 +772,84 @@ constexpr ListJob kListJobs[] = {
     // Sources: raw.githubusercontent.com/uBlockOrigin/uAssets  (Brave uses
     //          raw.githubusercontent.com, not ublockorigin.github.io mirror)
     // -----------------------------------------------------------------------
-    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt",
+    {"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters.txt",
      "ublock-filters.txt"},
-    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2020.txt",
+    {"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2020.txt",
      "ublock-filters-2020.txt"},
-    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2021.txt",
+    {"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2021.txt",
      "ublock-filters-2021.txt"},
-    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2022.txt",
+    {"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2022.txt",
      "ublock-filters-2022.txt"},
-    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2023.txt",
+    {"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2023.txt",
      "ublock-filters-2023.txt"},
-    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2024.txt",
+    {"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2024.txt",
      "ublock-filters-2024.txt"},
-    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2025.txt",
+    {"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2025.txt",
      "ublock-filters-2025.txt"},
-    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2026.txt",
+    {"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-2026.txt",
      "ublock-filters-2026.txt"},
-    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-general.txt",
+    {"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/filters-general.txt",
      "ublock-filters-general.txt"},
-    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/badware.txt",
+    {"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/badware.txt",
      "ublock-badware.txt"},
-    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/resource-abuse.txt",
+    {"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/resource-abuse.txt",
      "ublock-resource-abuse.txt"},
-    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt",
+    {"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt",
      "ublock-unbreak.txt"},
-    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/quick-fixes.txt",
+    {"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/quick-fixes.txt",
      "ublock-quick-fixes.txt"},
-    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/ubo-link-shorteners.txt",
+    {"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/ubo-link-shorteners.txt",
      "ublock-link-shorteners.txt"},
-    {L"https://easylist.to/easylist/easylist.txt",
+    {"https://easylist.to/easylist/easylist.txt",
      "easylist.txt"},
-    {L"https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-agh-online.txt",
+    {"https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-agh-online.txt",
      "urlhaus.txt"},
     // Brave-specific (Default list)
-    {L"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-unbreak.txt",
+    {"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-unbreak.txt",
      "brave-unbreak.txt"},
-    {L"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-unbreak.txt",
+    {"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-unbreak.txt",
      "brave-unbreak-lists.txt"},
-    {L"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-specific.txt",
+    {"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-specific.txt",
      "brave-specific.txt"},
-    {L"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-social.txt",
+    {"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-social.txt",
      "brave-social.txt"},
-    {L"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-sugarcoat.txt",
+    {"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-sugarcoat.txt",
      "brave-sugarcoat.txt"},
     // -----------------------------------------------------------------------
     // Brave Default Privacy Filters (uuid: "4D715457")
     // -----------------------------------------------------------------------
-    {L"https://easylist.to/easylist/easyprivacy.txt",
+    {"https://easylist.to/easylist/easyprivacy.txt",
      "easyprivacy.txt"},
-    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt",
+    {"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/privacy.txt",
      "ublock-privacy.txt"},
     // -----------------------------------------------------------------------
     // Brave First-Party Filters (uuid: "E99CBD02")
     // -----------------------------------------------------------------------
-    {L"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-firstparty.txt",
+    {"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-firstparty.txt",
      "brave-firstparty.txt"},
-    {L"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-firstparty-regional.txt",
+    {"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-firstparty-regional.txt",
      "brave-firstparty-regional.txt"},
     // -----------------------------------------------------------------------
     // Cookie notice blocker (uuid: "AC023D22", default_enabled)
     // -----------------------------------------------------------------------
-    {L"https://secure.fanboy.co.nz/fanboy-cookiemonster_ubo.txt",
+    {"https://secure.fanboy.co.nz/fanboy-cookiemonster_ubo.txt",
      "easylist-cookie.txt"},
-    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/annoyances-cookies.txt",
+    {"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/annoyances-cookies.txt",
      "ublock-cookies.txt"},
-    {L"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-cookie-specific.txt",
+    {"https://raw.githubusercontent.com/brave/adblock-lists/master/brave-lists/brave-cookie-specific.txt",
      "brave-cookie-specific.txt"},
     // -----------------------------------------------------------------------
     // Mobile app promo blocker (uuid: "2F3DCE16", default_enabled)
     // -----------------------------------------------------------------------
-    {L"https://secure.fanboy.co.nz/fanboy-mobile-notifications.txt",
+    {"https://secure.fanboy.co.nz/fanboy-mobile-notifications.txt",
      "fanboy-mobile-notifications.txt"},
     // -----------------------------------------------------------------------
     // Annoying distractions (uuid: "67E792D4") — loaded only in aggressive mode
     // Brave uses fanboy-annoyance_ubo.txt, NOT the generic fanboy-annoyance.txt
     // -----------------------------------------------------------------------
-    {L"https://secure.fanboy.co.nz/fanboy-annoyance_ubo.txt",
+    {"https://secure.fanboy.co.nz/fanboy-annoyance_ubo.txt",
      "fanboy-annoyance.txt"},
-    {L"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/annoyances-others.txt",
+    {"https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/annoyances-others.txt",
      "ublock-annoyances-others.txt"},
 };
 
@@ -858,7 +883,6 @@ void AdblockService::MaybeUpdateListsAsync() {
   }
 
   std::thread([this]() {
-#if defined(OS_WIN)
     const auto dir =
         std::filesystem::path(utf8::Widen(paths::EnsureAdblockDir()));
     bool any = false;
@@ -881,9 +905,6 @@ void AdblockService::MaybeUpdateListsAsync() {
       }
       LOG(INFO) << "adblock filter lists updated";
     }
-#else
-    (void)this;
-#endif
   }).detach();
 }
 

@@ -1,10 +1,14 @@
 # Build
 /build/
+/build-linux/
 /out/
 /cmake-build-*/
 
 # CEF binary distribution (downloaded)
 /third_party/cef/
+/third_party/cef-linux64/
+/third_party/cef-linuxarm64/
+/third_party/cef-windows64/
 /third_party/cef_binary_*.tar.bz2
 /third_party/cef_binary_*.tar.xz
 /third_party/*.tar.bz2

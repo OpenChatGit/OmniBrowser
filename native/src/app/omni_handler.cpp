@@ -44,6 +44,10 @@
 
 #include <chrono>
 #include <filesystem>
+#include <fstream>
+#if defined(OS_LINUX)
+#include <unistd.h>
+#endif
 
 namespace omni {
 namespace {
@@ -2326,6 +2330,19 @@ int OmniHandler::ContentMemoryMb() const {
     return 0;
   }
   const SIZE_T bytes = pmc.WorkingSetSize;
+  return static_cast<int>((bytes + (512ull * 1024ull)) / (1024ull * 1024ull));
+#elif defined(OS_LINUX)
+  std::ifstream in("/proc/self/statm");
+  long pages = 0;
+  if (!(in >> pages)) {
+    return 0;
+  }
+  const long page = ::sysconf(_SC_PAGESIZE);
+  if (page <= 0 || pages <= 0) {
+    return 0;
+  }
+  const unsigned long long bytes =
+      static_cast<unsigned long long>(pages) * static_cast<unsigned long long>(page);
   return static_cast<int>((bytes + (512ull * 1024ull)) / (1024ull * 1024ull));
 #else
   return 0;

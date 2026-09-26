@@ -9,7 +9,12 @@
 #include <thread>
 #include <vector>
 
+#if defined(_WIN32)
 #include <windows.h>
+#else
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 #include "include/cef_task.h"
 #include "include/wrapper/cef_helpers.h"
@@ -33,6 +38,7 @@ class UiTask : public CefTask {
   IMPLEMENT_REFCOUNTING(UiTask);
 };
 
+#if defined(_WIN32)
 std::wstring FindGitExe() {
   wchar_t buf[MAX_PATH];
   if (SearchPathW(nullptr, L"git.exe", nullptr, MAX_PATH, buf, nullptr) > 0) {
@@ -138,6 +144,98 @@ bool RunGit(const std::wstring& git_exe,
     *exit_code = code;
   }
   return true;
+}
+
+#else
+
+bool RunGit(const std::string& args,
+            const std::string& cwd,
+            std::string* stdout_out,
+            std::string* stderr_out,
+            unsigned long* exit_code) {
+  int out_pipe[2];
+  int err_pipe[2];
+  if (pipe(out_pipe) != 0 || pipe(err_pipe) != 0) {
+    return false;
+  }
+  const pid_t pid = ::fork();
+  if (pid < 0) {
+    return false;
+  }
+  if (pid == 0) {
+    if (!cwd.empty()) {
+      ::chdir(cwd.c_str());
+    }
+    ::dup2(out_pipe[1], STDOUT_FILENO);
+    ::dup2(err_pipe[1], STDERR_FILENO);
+    ::close(out_pipe[0]);
+    ::close(out_pipe[1]);
+    ::close(err_pipe[0]);
+    ::close(err_pipe[1]);
+    const std::string cmd = std::string("git ") + args;
+    ::execlp("sh", "sh", "-c", cmd.c_str(), static_cast<char*>(nullptr));
+    _exit(127);
+  }
+  ::close(out_pipe[1]);
+  ::close(err_pipe[1]);
+
+  auto read_all = [](int fd) -> std::string {
+    std::string out;
+    char buf[4096];
+    for (;;) {
+      const ssize_t n = ::read(fd, buf, sizeof(buf));
+      if (n <= 0) {
+        break;
+      }
+      out.append(buf, buf + n);
+    }
+    return out;
+  };
+  std::string so;
+  std::string se;
+  std::thread t_out([&]() { so = read_all(out_pipe[0]); });
+  std::thread t_err([&]() { se = read_all(err_pipe[0]); });
+  t_out.join();
+  t_err.join();
+  ::close(out_pipe[0]);
+  ::close(err_pipe[0]);
+  int status = 1;
+  ::waitpid(pid, &status, 0);
+  if (stdout_out) {
+    *stdout_out = so;
+  }
+  if (stderr_out) {
+    *stderr_out = se;
+  }
+  if (exit_code) {
+    *exit_code = static_cast<unsigned long>(WIFEXITED(status) ? WEXITSTATUS(status) : 1);
+  }
+  return true;
+}
+
+#endif
+
+bool GitCmd(const char* args,
+            const std::string& cwd,
+            std::string* stdout_out,
+            std::string* stderr_out,
+            int* exit_code) {
+#if defined(_WIN32)
+  DWORD code = 1;
+  const bool ok = RunGit(FindGitExe(), utf8::Widen(args), utf8::Widen(cwd),
+                         stdout_out, stderr_out, &code);
+  if (exit_code) {
+    *exit_code = static_cast<int>(code);
+  }
+  return ok;
+#else
+  unsigned long code = 1;
+  const bool ok = RunGit(args, cwd, stdout_out, stderr_out, &code);
+  if (exit_code) {
+    *exit_code = static_cast<int>(code);
+  }
+  return ok;
+#endif
 }
 
 std::string Trim(const std::string& s) {
@@ -268,13 +366,12 @@ Json CollectStatus(const std::string& hint) {
     return out;
   }
 
-  const std::wstring git = FindGitExe();
-  const std::wstring cwd = utf8::Widen(root);
+  const std::string cwd = root;
   std::string so;
   std::string se;
-  DWORD code = 1;
+  int code = 1;
 
-  if (!RunGit(git, L"rev-parse --abbrev-ref HEAD", cwd, &so, &se, &code) ||
+  if (!GitCmd("rev-parse --abbrev-ref HEAD", cwd, &so, &se, &code) ||
       code != 0) {
     out["ok"] = false;
     out["error"] = Trim(se).empty() ? "git not available" : Trim(se);
@@ -288,7 +385,7 @@ Json CollectStatus(const std::string& hint) {
 
   so.clear();
   se.clear();
-  if (!RunGit(git, L"status --porcelain=v1 -uall", cwd, &so, &se, &code)) {
+  if (!GitCmd("status --porcelain=v1 -uall", cwd, &so, &se, &code)) {
     out["ok"] = false;
     out["error"] = "git status failed";
     out["branch"] = branch;
@@ -342,7 +439,7 @@ Json CollectStatus(const std::string& hint) {
   // Line stats for tracked changes vs HEAD.
   so.clear();
   se.clear();
-  RunGit(git, L"diff --numstat HEAD", cwd, &so, &se, &code);
+  GitCmd("diff --numstat HEAD", cwd, &so, &se, &code);
   ApplyNumstat(files, so);
 
   // Untracked: count lines on disk.

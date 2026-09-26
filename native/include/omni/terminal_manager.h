@@ -8,7 +8,11 @@
 #include <thread>
 #include <unordered_map>
 
+#if defined(_WIN32)
 #include <windows.h>
+#else
+#include <sys/types.h>
+#endif
 
 #include "include/wrapper/cef_message_router.h"
 
@@ -37,19 +41,26 @@ class TerminalManager {
  private:
   struct Session {
     std::string id;
+#if defined(_WIN32)
     HPCON hpc = nullptr;
     HANDLE pipe_in = INVALID_HANDLE_VALUE;
     HANDLE pipe_out = INVALID_HANDLE_VALUE;
     PROCESS_INFORMATION pi{};
     STARTUPINFOEXW si{};
     LPPROC_THREAD_ATTRIBUTE_LIST attr_list = nullptr;
+    SHORT cols = 80;
+    SHORT rows = 24;
+#else
+    int master_fd = -1;
+    pid_t child = -1;
+    int cols = 80;
+    int rows = 24;
+#endif
     std::thread reader;
     std::atomic<bool> alive{true};
     std::mutex callback_mu;
     OutputCallback callback;
     int64_t query_id = -1;
-    SHORT cols = 80;
-    SHORT rows = 24;
   };
 
   void ReaderLoop(std::shared_ptr<Session> session);

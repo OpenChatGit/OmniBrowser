@@ -12,11 +12,34 @@ set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 # CEF sandbox complicates packaging (bootstrap DLL). v1 builds a plain EXE.
 set(USE_SANDBOX OFF CACHE BOOL "Enable CEF sandbox" FORCE)
 
-set(CEF_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cef")
-if(NOT EXISTS "${CEF_ROOT}/cmake/FindCEF.cmake")
-  message(FATAL_ERROR
-    "CEF not found at ${CEF_ROOT}.\n"
-    "Run: powershell -ExecutionPolicy Bypass -File scripts/download_cef.ps1")
+if(NOT DEFINED CEF_ROOT)
+  if(WIN32)
+    set(_omni_cef_candidates
+      "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cef"
+      "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cef-windows64")
+  else()
+    set(_omni_cef_candidates
+      "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cef-linux64"
+      "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cef-linuxarm64"
+      "${CMAKE_CURRENT_SOURCE_DIR}/third_party/cef")
+  endif()
+  foreach(_omni_cef_dir IN LISTS _omni_cef_candidates)
+    if(EXISTS "${_omni_cef_dir}/cmake/FindCEF.cmake")
+      set(CEF_ROOT "${_omni_cef_dir}")
+      break()
+    endif()
+  endforeach()
+endif()
+if(NOT CEF_ROOT OR NOT EXISTS "${CEF_ROOT}/cmake/FindCEF.cmake")
+  if(WIN32)
+    message(FATAL_ERROR
+      "CEF not found under third_party/cef.\n"
+      "Run: powershell -ExecutionPolicy Bypass -File scripts/download_cef.ps1")
+  else()
+    message(FATAL_ERROR
+      "CEF not found under third_party/cef-linux64.\n"
+      "Run: bash scripts/download_cef.sh")
+  endif()
 endif()
 
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CEF_ROOT}/cmake")

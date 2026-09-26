@@ -2,7 +2,12 @@
 
 #include <cstdlib>
 
+#if defined(_WIN32)
 #include <windows.h>
+#else
+#include <unistd.h>
+#include <pwd.h>
+#endif
 
 #include "include/cef_parser.h"
 #include "omni/omni_handler.h"
@@ -49,13 +54,20 @@ bool HandleTerminalCommand(
     const int rows = params.value("rows", 24);
     std::string cwd = params.value("cwd", "");
     if (cwd.empty()) {
-      // Match a normal Windows terminal: start in the user profile.
+#if defined(_WIN32)
       wchar_t* profile = nullptr;
       size_t len = 0;
       if (_wdupenv_s(&profile, &len, L"USERPROFILE") == 0 && profile) {
         cwd = utf8::Narrow(profile);
         free(profile);
       }
+#else
+      if (const char* home = std::getenv("HOME"); home && home[0]) {
+        cwd = home;
+      } else if (passwd* pw = getpwuid(getuid())) {
+        cwd = pw->pw_dir ? pw->pw_dir : "";
+      }
+#endif
     }
 
     std::string error;

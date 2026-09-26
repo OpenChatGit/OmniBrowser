@@ -30,6 +30,11 @@ void OmniApp::OnBeforeCommandLineProcessing(
   // Keep media playing in hidden (background) tab browser views.
   command_line->AppendSwitch("disable-backgrounding-occluded-windows");
   command_line->AppendSwitch("disable-renderer-backgrounding");
+#if defined(OS_LINUX)
+  if (!command_line->HasSwitch("ozone-platform")) {
+    command_line->AppendSwitchWithValue("ozone-platform", "x11");
+  }
+#endif
   if (IsDevMode()) {
     command_line->AppendSwitchWithValue("disable-features", "IsolateOrigins");
   }

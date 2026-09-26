@@ -6,14 +6,29 @@
 
 #include "include/cef_parser.h"
 #include "include/cef_task.h"
+
+#if defined(_WIN32)
 #include "omni/utf8.h"
+#else
+#include <fcntl.h>
+#include <pwd.h>
+#include <signal.h>
+#include <stdlib.h>
+#include <sys/ioctl.h>
+#include <sys/wait.h>
+#include <termios.h>
+#include <unistd.h>
+#include <pty.h>
+#endif
 
 namespace omni {
 namespace {
 
+#if defined(_WIN32)
 std::wstring DefaultShell() {
   return L"powershell.exe";
 }
+#endif
 
 std::string ToBase64(const char* data, size_t size) {
   return CefBase64Encode(data, size).ToString();
@@ -53,6 +68,7 @@ std::string TerminalManager::Open(const std::string& cwd,
     rows = 24;
   }
 
+#if defined(_WIN32)
   HANDLE pty_in_read = INVALID_HANDLE_VALUE;
   HANDLE pty_in_write = INVALID_HANDLE_VALUE;
   HANDLE pty_out_read = INVALID_HANDLE_VALUE;
@@ -136,6 +152,58 @@ std::string TerminalManager::Open(const std::string& cwd,
     }
     return {};
   }
+#else
+  int master = -1;
+  int slave = -1;
+  struct winsize ws {};
+  ws.ws_col = static_cast<unsigned short>(cols);
+  ws.ws_row = static_cast<unsigned short>(rows);
+  if (openpty(&master, &slave, nullptr, nullptr, &ws) != 0) {
+    if (error) {
+      *error = "openpty failed";
+    }
+    return {};
+  }
+
+  auto session = std::make_shared<Session>();
+  session->master_fd = master;
+  session->cols = cols;
+  session->rows = rows;
+
+  const pid_t pid = ::fork();
+  if (pid < 0) {
+    ::close(master);
+    ::close(slave);
+    if (error) {
+      *error = "fork failed";
+    }
+    return {};
+  }
+  if (pid == 0) {
+    ::close(master);
+    ::setsid();
+    if (::ioctl(slave, TIOCSCTTY, nullptr) < 0) {
+      _exit(127);
+    }
+    ::dup2(slave, STDIN_FILENO);
+    ::dup2(slave, STDOUT_FILENO);
+    ::dup2(slave, STDERR_FILENO);
+    if (slave > STDERR_FILENO) {
+      ::close(slave);
+    }
+    if (!cwd.empty()) {
+      ::chdir(cwd.c_str());
+    }
+    const char* shell = std::getenv("SHELL");
+    if (!shell || !shell[0]) {
+      shell = "/bin/bash";
+    }
+    ::execl(shell, shell, static_cast<char*>(nullptr));
+    _exit(127);
+  }
+  ::close(slave);
+  session->child = pid;
+#endif
 
   {
     std::lock_guard<std::mutex> lock(mu_);
@@ -157,6 +225,7 @@ bool TerminalManager::Write(const std::string& id, const std::string& data) {
     }
     session = it->second;
   }
+#if defined(_WIN32)
   if (!session->alive || session->pipe_in == INVALID_HANDLE_VALUE ||
       data.empty()) {
     return false;
@@ -173,6 +242,22 @@ bool TerminalManager::Write(const std::string& id, const std::string& data) {
     remaining -= written;
   }
   return true;
+#else
+  if (!session->alive || session->master_fd < 0 || data.empty()) {
+    return false;
+  }
+  const char* bytes = data.data();
+  size_t remaining = data.size();
+  while (remaining > 0) {
+    const ssize_t n = ::write(session->master_fd, bytes, remaining);
+    if (n <= 0) {
+      return false;
+    }
+    bytes += n;
+    remaining -= static_cast<size_t>(n);
+  }
+  return true;
+#endif
 }
 
 bool TerminalManager::Resize(const std::string& id, int cols, int rows) {
@@ -185,13 +270,28 @@ bool TerminalManager::Resize(const std::string& id, int cols, int rows) {
     }
     session = it->second;
   }
-  if (!session->hpc || cols < 20 || rows < 5) {
+  if (cols < 20 || rows < 5) {
+    return false;
+  }
+#if defined(_WIN32)
+  if (!session->hpc) {
     return false;
   }
   session->cols = static_cast<SHORT>(cols);
   session->rows = static_cast<SHORT>(rows);
   return SUCCEEDED(
       ResizePseudoConsole(session->hpc, {session->cols, session->rows}));
+#else
+  if (session->master_fd < 0) {
+    return false;
+  }
+  session->cols = cols;
+  session->rows = rows;
+  struct winsize ws {};
+  ws.ws_col = static_cast<unsigned short>(cols);
+  ws.ws_row = static_cast<unsigned short>(rows);
+  return ::ioctl(session->master_fd, TIOCSWINSZ, &ws) == 0;
+#endif
 }
 
 bool TerminalManager::Close(const std::string& id) {
@@ -208,8 +308,6 @@ bool TerminalManager::Close(const std::string& id) {
       query_to_session_.erase(session->query_id);
     }
   }
-  // ConPTY teardown (ClosePseudoConsole / reader join) must not run on the
-  // CEF UI thread — it can deadlock and freeze the whole app.
   std::thread([session]() { DestroySession(session); }).detach();
   return true;
 }
@@ -267,6 +365,7 @@ void TerminalManager::CloseAll() {
 void TerminalManager::ReaderLoop(std::shared_ptr<Session> session) {
   char buffer[4096];
   while (session->alive) {
+#if defined(_WIN32)
     DWORD read = 0;
     const BOOL ok =
         ReadFile(session->pipe_out, buffer, sizeof(buffer), &read, nullptr);
@@ -275,6 +374,14 @@ void TerminalManager::ReaderLoop(std::shared_ptr<Session> session) {
       break;
     }
     DeliverOutput(session, std::string(buffer, buffer + read), false);
+#else
+    const ssize_t n = ::read(session->master_fd, buffer, sizeof(buffer));
+    if (n <= 0) {
+      DeliverOutput(session, {}, true);
+      break;
+    }
+    DeliverOutput(session, std::string(buffer, buffer + n), false);
+#endif
   }
 }
 
@@ -320,13 +427,11 @@ void TerminalManager::DestroySession(const std::shared_ptr<Session>& session) {
     session->query_id = -1;
   }
 
-  // Kill the shell first. Calling ClosePseudoConsole while the process is
-  // still alive and a ReadFile is pending is a known ConPTY hang.
+#if defined(_WIN32)
   if (session->pi.hProcess) {
     TerminateProcess(session->pi.hProcess, 0);
   }
 
-  // Closing the pipes unblocks the reader thread's ReadFile.
   if (session->pipe_in != INVALID_HANDLE_VALUE) {
     CloseHandle(session->pipe_in);
     session->pipe_in = INVALID_HANDLE_VALUE;
@@ -337,8 +442,6 @@ void TerminalManager::DestroySession(const std::shared_ptr<Session>& session) {
     session->pipe_out = INVALID_HANDLE_VALUE;
   }
 
-  // Join the reader BEFORE ClosePseudoConsole — otherwise ConPTY can deadlock
-  // waiting to flush output that the reader never drains.
   if (session->reader.joinable()) {
     if (session->reader.get_id() != std::this_thread::get_id()) {
       session->reader.join();
@@ -366,6 +469,27 @@ void TerminalManager::DestroySession(const std::shared_ptr<Session>& session) {
     HeapFree(GetProcessHeap(), 0, session->attr_list);
     session->attr_list = nullptr;
   }
+#else
+  if (session->child > 0) {
+    ::kill(session->child, SIGTERM);
+  }
+  if (session->master_fd >= 0) {
+    ::close(session->master_fd);
+    session->master_fd = -1;
+  }
+  if (session->reader.joinable()) {
+    if (session->reader.get_id() != std::this_thread::get_id()) {
+      session->reader.join();
+    } else {
+      session->reader.detach();
+    }
+  }
+  if (session->child > 0) {
+    int status = 0;
+    ::waitpid(session->child, &status, WNOHANG);
+    session->child = -1;
+  }
+#endif
 }
 
 }  // namespace omni

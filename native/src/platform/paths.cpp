@@ -1,10 +1,16 @@
 #include "omni/paths.h"
 
+#include <chrono>
 #include <filesystem>
 #include <sstream>
 
+#if defined(_WIN32)
 #include <windows.h>
 #include <shlobj.h>
+#else
+#include <cstdlib>
+#include <unistd.h>
+#endif
 
 #include "omni/build_config.h"
 #include "omni/dev_mode.h"
@@ -32,74 +38,113 @@ std::string SanitizeInstanceId(const std::string& raw) {
   return out;
 }
 
+std::string FromFs(const std::filesystem::path& p) {
+  return utf8::Narrow(p.wstring());
+}
+
+std::filesystem::path ToFs(const std::string& utf8) {
+  return std::filesystem::path(utf8::Widen(utf8));
+}
+
+std::string Join(const std::string& a, const std::string& b) {
+  return FromFs(ToFs(a) / utf8::Widen(b));
+}
+
 }  // namespace
 
+uint64_t NowTickMs() {
+  return static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now().time_since_epoch())
+          .count());
+}
+
 std::string ExecutableDir() {
+#if defined(_WIN32)
   wchar_t buf[MAX_PATH];
   const DWORD len = GetModuleFileNameW(nullptr, buf, MAX_PATH);
   if (len == 0 || len >= MAX_PATH) {
     return ".";
   }
   std::filesystem::path p(buf);
-  return utf8::Narrow(p.parent_path().wstring());
+  return FromFs(p.parent_path());
+#else
+  char buf[4096];
+  const ssize_t len = ::readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+  if (len <= 0) {
+    return ".";
+  }
+  buf[len] = '\0';
+  return FromFs(std::filesystem::path(buf).parent_path());
+#endif
 }
 
 std::string AppDataDir() {
+#if defined(_WIN32)
   wchar_t* appdata = nullptr;
   std::string result;
   size_t len = 0;
   if (_wdupenv_s(&appdata, &len, L"APPDATA") == 0 && appdata) {
     std::filesystem::path p(appdata);
     p /= L"OmniBrowser";
-    result = utf8::Narrow(p.wstring());
+    result = FromFs(p);
     free(appdata);
   } else {
-    result = ExecutableDir() + "\\userdata";
+    result = Join(ExecutableDir(), "userdata");
   }
   return result;
+#else
+  if (const char* xdg = std::getenv("XDG_DATA_HOME"); xdg && xdg[0]) {
+    return Join(xdg, "OmniBrowser");
+  }
+  if (const char* home = std::getenv("HOME"); home && home[0]) {
+    return FromFs(ToFs(home) / ".local" / "share" / "OmniBrowser");
+  }
+  return Join(ExecutableDir(), "userdata");
+#endif
 }
 
 std::string EnsureAppDataDir() {
   const std::string dir = AppDataDir();
   std::error_code ec;
-  std::filesystem::create_directories(
-      std::filesystem::path(utf8::Widen(dir)), ec);
+  std::filesystem::create_directories(ToFs(dir), ec);
   return dir;
 }
 
 std::string DatabasePath() {
-  return EnsureAppDataDir() + "\\library.db";
+  return Join(EnsureAppDataDir(), "library.db");
 }
 
 std::string HistoryPath() {
-  return EnsureAppDataDir() + "\\visit_history.json";
+  return Join(EnsureAppDataDir(), "visit_history.json");
 }
 
 std::string BookmarksPath() {
-  return EnsureAppDataDir() + "\\bookmarks.json";
+  return Join(EnsureAppDataDir(), "bookmarks.json");
 }
 
 std::string DownloadsPath() {
-  return EnsureAppDataDir() + "\\downloads.json";
+  return Join(EnsureAppDataDir(), "downloads.json");
 }
 
 std::string SettingsPath() {
-  return EnsureAppDataDir() + "\\settings.json";
+  return Join(EnsureAppDataDir(), "settings.json");
 }
 
 std::string SessionPath() {
-  return EnsureAppDataDir() + "\\tab_session.json";
+  return Join(EnsureAppDataDir(), "tab_session.json");
 }
 
 std::string PluginsDir() {
-  return UiRootDir() + "\\plugins";
+  return Join(UiRootDir(), "plugins");
 }
 
 std::string PendingOpenTabPath() {
-  return EnsureAppDataDir() + "\\pending_open_tab.json";
+  return Join(EnsureAppDataDir(), "pending_open_tab.json");
 }
 
 std::string UserDownloadsDir() {
+#if defined(_WIN32)
   PWSTR known = nullptr;
   if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Downloads, 0, nullptr, &known)) &&
       known) {
@@ -109,14 +154,19 @@ std::string UserDownloadsDir() {
       return result;
     }
   }
-  return EnsureAppDataDir() + "\\Downloads";
+  return Join(EnsureAppDataDir(), "Downloads");
+#else
+  if (const char* home = std::getenv("HOME"); home && home[0]) {
+    return FromFs(ToFs(home) / "Downloads");
+  }
+  return Join(EnsureAppDataDir(), "Downloads");
+#endif
 }
 
 std::string EnsureUserDownloadsDir() {
   const std::string dir = UserDownloadsDir();
   std::error_code ec;
-  std::filesystem::create_directories(std::filesystem::path(utf8::Widen(dir)),
-                                      ec);
+  std::filesystem::create_directories(ToFs(dir), ec);
   return dir;
 }
 
@@ -142,38 +192,40 @@ void WipePrivateProfile() {
   }
   std::error_code ec;
   std::filesystem::remove_all(
-      std::filesystem::path(utf8::Widen(AppDataDir() + "\\instances\\" +
-                                        g_profile_instance_id)),
-      ec);
+      ToFs(AppDataDir()) / "instances" / g_profile_instance_id, ec);
 }
 
 std::string CacheRootDir() {
   if (!g_profile_instance_id.empty()) {
-    return AppDataDir() + "\\instances\\" + g_profile_instance_id + "\\cef";
+    return FromFs(ToFs(AppDataDir()) / "instances" / g_profile_instance_id /
+                  "cef");
   }
-  return AppDataDir() + "\\cef";
+  return Join(AppDataDir(), "cef");
 }
 
 std::string EnsureCacheRootDir() {
   const std::string dir = CacheRootDir();
   std::error_code ec;
-  std::filesystem::create_directories(
-      std::filesystem::path(utf8::Widen(dir)), ec);
+  std::filesystem::create_directories(ToFs(dir), ec);
   return dir;
 }
 
 std::string PathToFileUrl(const std::string& path) {
-  std::filesystem::path p(utf8::Widen(path));
+  std::filesystem::path p = ToFs(path);
   std::error_code ec;
   p = std::filesystem::weakly_canonical(p, ec);
-  std::string native = utf8::Narrow(p.wstring());
+  std::string native = FromFs(p);
   for (char& c : native) {
     if (c == '\\') {
       c = '/';
     }
   }
   std::ostringstream oss;
-  oss << "file:///" << native;
+  if (!native.empty() && native.front() == '/') {
+    oss << "file://" << native;
+  } else {
+    oss << "file:///" << native;
+  }
   return oss.str();
 }
 
@@ -182,17 +234,15 @@ std::string UiRootDir() {
     const std::filesystem::path source(OMNI_UI_SOURCE_DIR);
     std::error_code ec;
     if (std::filesystem::exists(source / "index.html", ec)) {
-      return utf8::Narrow(source.wstring());
+      return FromFs(source);
     }
   }
-  return utf8::Narrow(
-      (std::filesystem::path(utf8::Widen(ExecutableDir())) / L"ui").wstring());
+  return FromFs(ToFs(ExecutableDir()) / "ui");
 }
 
 std::string UiEntryUrl() {
-  const std::filesystem::path index =
-      std::filesystem::path(utf8::Widen(UiRootDir())) / L"index.html";
-  std::string url = PathToFileUrl(utf8::Narrow(index.wstring()));
+  const std::filesystem::path index = ToFs(UiRootDir()) / "index.html";
+  std::string url = PathToFileUrl(FromFs(index));
   if (IsPrivateMode()) {
     url += "?private=1";
   }
@@ -200,42 +250,36 @@ std::string UiEntryUrl() {
 }
 
 std::string UiOverlayUrl() {
-  const std::filesystem::path overlay =
-      std::filesystem::path(utf8::Widen(UiRootDir())) / L"overlay.html";
-  return PathToFileUrl(utf8::Narrow(overlay.wstring()));
+  const std::filesystem::path overlay = ToFs(UiRootDir()) / "overlay.html";
+  return PathToFileUrl(FromFs(overlay));
 }
 
 std::string AdblockDir() {
-  return AppDataDir() + "\\adblock";
+  return Join(AppDataDir(), "adblock");
 }
 
 std::string EnsureAdblockDir() {
   const std::string dir = AdblockDir();
   std::error_code ec;
-  std::filesystem::create_directories(
-      std::filesystem::path(utf8::Widen(dir)), ec);
+  std::filesystem::create_directories(ToFs(dir), ec);
   return dir;
 }
 
 std::string AdblockPrefsPath() {
-  return EnsureAdblockDir() + "\\prefs.json";
+  return Join(EnsureAdblockDir(), "prefs.json");
 }
 
 std::string BundledAdblockDir() {
-  // Prefer next-to-exe copy (POST_BUILD). Fall back to repo resources/adblock.
-  const auto beside_exe =
-      std::filesystem::path(utf8::Widen(ExecutableDir())) / L"adblock";
+  const auto beside_exe = ToFs(ExecutableDir()) / "adblock";
   std::error_code ec;
   if (std::filesystem::exists(beside_exe / "omni-baseline.txt", ec)) {
-    return utf8::Narrow(beside_exe.wstring());
+    return FromFs(beside_exe);
   }
-  const auto from_ui =
-      std::filesystem::path(utf8::Widen(UiRootDir())).parent_path() /
-      L"resources" / L"adblock";
+  const auto from_ui = ToFs(UiRootDir()).parent_path() / "resources" / "adblock";
   if (std::filesystem::exists(from_ui / "omni-baseline.txt", ec)) {
-    return utf8::Narrow(from_ui.wstring());
+    return FromFs(from_ui);
   }
-  return utf8::Narrow(beside_exe.wstring());
+  return FromFs(beside_exe);
 }
 
 }  // namespace omni::paths
