@@ -1,6 +1,12 @@
 {
   "updates": [
     {
+      "id": "browsing-data-controls-2026-10-09",
+      "date": "2026-10-09",
+      "title": "Clear browsing data",
+      "markdown": "The app menu can now clear this browser profile's visit history, cookies, HTTP cache, and saved HTTP sign-in credentials. The browser asks before deleting data and confirms when the cleanup finishes. Bookmarks and downloaded files are kept. Private windows are supported and use a separate profile that is wiped when the window closes."
+    },
+    {
       "id": "cloudflare-edge-2026-08-08",
       "date": "2026-08-08",
       "title": "First preview - status & roadmap",

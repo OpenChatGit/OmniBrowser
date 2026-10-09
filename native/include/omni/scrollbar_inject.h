@@ -18,12 +18,12 @@ void InjectAdblockCosmeticCss(CefRefPtr<CefFrame> frame,
                               const std::string& hide_css);
 
 /**
- * Early (OnLoadStart): hide/:style CSS + cheap YouTube player hook only.
- * Heavy observers stay off the first-paint path.
+ * Early (OnLoadStart): apply compatible page cosmetics. YouTube page-world
+ * injection is skipped because Trusted Types and its active DOM destabilize CEF.
  */
 void InjectAdblockCosmetics(CefRefPtr<CefFrame> frame);
 
-/** After load: generic class/id observer + slot collapse (idle). */
+/** After load: generic class/id observer + slot collapse; skipped on YouTube. */
 void InjectAdblockObservers(CefRefPtr<CefFrame> frame);
 
 /**
@@ -38,10 +38,5 @@ void InjectAdblockScriptletsBrave(CefRefPtr<CefFrame> frame,
 void InjectAdblockGenericObserver(CefRefPtr<CefFrame> frame,
                                   const std::string& exceptions_json,
                                   bool generichide);
-
-/** @deprecated Prefer InjectContentPageScripts. */
-inline void InjectScrollbarStyles(CefRefPtr<CefFrame> frame) {
-  InjectContentPageScripts(frame);
-}
 
 }  // namespace omni

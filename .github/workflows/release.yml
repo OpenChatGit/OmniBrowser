@@ -9,7 +9,11 @@ on:
       version:
         description: 'Version tag (e.g. v0.1.1)'
         required: false
-        default: ''
+        default: 'v0.1.1'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -54,8 +58,27 @@ jobs:
 
       - name: Prepare Release Artifacts & Changelog
         shell: powershell
+        env:
+          RELEASE_VERSION_INPUT: ${{ inputs.version }}
         run: |
-          $Version = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME } else { if ("${{ inputs.version }}") { "${{ inputs.version }}" } else { "v0.1.0" } }
+          $ProjectVersion = (Select-String -Path "CMakeLists.txt" -Pattern '^project\(OmniBrowser VERSION ([0-9]+\.[0-9]+\.[0-9]+)' | Select-Object -First 1).Matches.Groups[1].Value
+          if (-not $ProjectVersion) { throw "Could not read the project version from CMakeLists.txt" }
+
+          if ($env:GITHUB_REF_TYPE -eq "tag") {
+            $Version = $env:GITHUB_REF_NAME
+          } elseif ($env:RELEASE_VERSION_INPUT) {
+            $Version = $env:RELEASE_VERSION_INPUT.Trim()
+          } else {
+            $Version = "v$ProjectVersion"
+          }
+          if ($Version -notmatch '^v?[0-9]+\.[0-9]+\.[0-9]+$') {
+            throw "Invalid release version '$Version'. Expected vMAJOR.MINOR.PATCH."
+          }
+          if (-not $Version.StartsWith("v")) { $Version = "v$Version" }
+          if ($Version.Substring(1) -ne $ProjectVersion) {
+            throw "Release tag $Version does not match CMake project version $ProjectVersion."
+          }
+
           $ReleaseDir = "build/native/Release"
           $ZipName = "OmniBrowser-$Version-windows-x64.zip"
           $NotesFile = "release_notes.md"
@@ -65,10 +88,12 @@ jobs:
             throw "Build output OmniBrowser.exe was not found in $ReleaseDir"
           }
 
-          # Ensure UI assets are bundled
+          # Ensure UI assets are bundled even if the build's post-build copy was skipped.
           if (-not (Test-Path "$ReleaseDir/ui/index.html")) {
-            Copy-Item -Path "ui" -Destination "$ReleaseDir/ui" -Recurse -Force
+            New-Item -ItemType Directory -Force -Path "$ReleaseDir/ui" | Out-Null
+            Copy-Item -Path "ui/*" -Destination "$ReleaseDir/ui" -Recurse -Force
           }
+          if (-not (Test-Path "$ReleaseDir/ui/overlay.html")) { throw "Overlay UI assets are missing from the release package." }
 
           Write-Host "Compressing $ReleaseDir into $ZipName..."
           Compress-Archive -Path "$ReleaseDir/*" -DestinationPath $ZipName -Force

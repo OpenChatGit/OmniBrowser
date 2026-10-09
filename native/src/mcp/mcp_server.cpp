@@ -31,6 +31,7 @@
 #include "include/wrapper/cef_closure_task.h"
 #include "include/views/cef_browser_view.h"
 #include "omni/api/api_dispatcher.h"
+#include "omni/agent_api.h"
 #include "omni/bookmark_store.h"
 #include "omni/history_store.h"
 #include "omni/log.h"
@@ -1272,13 +1273,27 @@ void McpServer::TouchAgentSession(const std::string& agent_id,
 }
 
 void McpServer::PauseAgents() {
+  agents_paused_ = true;
+  {
+    std::lock_guard<std::mutex> lock(g_agents_mu);
+    g_agents.clear();
+  }
+  FailPendingAgentQueries("Agent control paused by the user");
+  RunOnUiAndWait([&]() {
+    auto* handler = OmniHandler::GetInstance();
+    if (handler) handler->SetAiPaused(true);
+  });
+}
+
+void McpServer::ResumeAgents() {
+  agents_paused_ = false;
   {
     std::lock_guard<std::mutex> lock(g_agents_mu);
     g_agents.clear();
   }
   RunOnUiAndWait([&]() {
     auto* handler = OmniHandler::GetInstance();
-    if (handler) handler->SetAiActive(false, 0);
+    if (handler) handler->SetAiPaused(false);
   });
 }
 
@@ -1356,6 +1371,9 @@ Json McpServer::ExecuteTool(const std::string& name, const Json& args) {
   }
   if (shutting_down_) {
     return Json{{"error", "Browser is shutting down"}};
+  }
+  if (agents_paused_) {
+    return Json{{"error", "Agent control is paused by the user"}};
   }
     if (!WaitForBrowserReady(std::chrono::milliseconds(20000))) {
     return Json{
@@ -1553,6 +1571,12 @@ Json McpServer::HandleJsonRpcRequest(const Json& req, const std::string& agent_i
   }
 
   if (method == "tools/call") {
+    if (agents_paused_) {
+      return Json{{"jsonrpc", "2.0"},
+                  {"id", id},
+                  {"error", {{"code", -32003},
+                             {"message", "Agent control is paused by the user"}}}};
+    }
     TouchAgentSession(resolved_agent, "");
     const std::string tool_name = params.value("name", "");
     const Json arguments = params.value("arguments", Json::object());

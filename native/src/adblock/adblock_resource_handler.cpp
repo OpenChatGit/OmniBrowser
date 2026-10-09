@@ -1,8 +1,10 @@
 #include "omni/adblock_resource_handler.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <string>
+#include <string_view>
 
 #include "include/wrapper/cef_helpers.h"
 #include "omni/adblock_service.h"
@@ -12,32 +14,60 @@ namespace omni {
 namespace {
 
 bool HostIsYoutube(const std::string& url) {
-  if (url.find("youtu") == std::string::npos) {
-    return false;
-  }
   const auto scheme = url.find("://");
   if (scheme == std::string::npos) {
     return false;
   }
   const size_t start = scheme + 3;
-  const size_t end = url.find_first_of("/?#", start);
-  const std::string_view host(url.data() + start,
-                              end == std::string::npos ? (url.size() - start) : (end - start));
-  return host.find("youtube.com") != std::string_view::npos ||
-         host.find("youtube-nocookie.com") != std::string_view::npos ||
-         host.find("youtubekids.com") != std::string_view::npos ||
-         host == "youtu.be" || host == "www.youtu.be";
+  const size_t end = url.find_first_of("/:?#", start);
+  std::string host = url.substr(
+      start, end == std::string::npos ? std::string::npos : end - start);
+  std::transform(host.begin(), host.end(), host.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  auto is_domain_or_subdomain = [&host](const char* domain) {
+    const std::string suffix = std::string(".") + domain;
+    return host == domain ||
+           (host.size() > suffix.size() &&
+            host.compare(host.size() - suffix.size(), suffix.size(), suffix) ==
+                0);
+  };
+  return is_domain_or_subdomain("youtube.com") ||
+         is_domain_or_subdomain("youtube-nocookie.com") ||
+         is_domain_or_subdomain("youtubekids.com") ||
+         is_domain_or_subdomain("youtu.be");
 }
 
 bool ShouldStripYoutubePlayerAds(const std::string& url) {
   if (!HostIsYoutube(url)) {
     return false;
   }
-  // Only player payloads — never the HTML document (that delays first paint).
-  return url.find("/youtubei/v1/player") != std::string::npos ||
-         url.find("/youtubei/v1/get_watch") != std::string::npos ||
-         url.find("/youtubei/v1/next") != std::string::npos ||
-         url.find("/youtubei/v1/reel_watch") != std::string::npos;
+  const size_t scheme = url.find("://");
+  const size_t path_start = url.find('/', scheme + 3);
+  if (path_start == std::string::npos) {
+    return false;
+  }
+  const size_t path_end = url.find_first_of("?#", path_start);
+  const std::string_view path(
+      url.data() + path_start,
+      path_end == std::string::npos ? url.size() - path_start
+                                    : path_end - path_start);
+  // Cover the player, continuation, playlist, and Shorts payloads used by
+  // current YouTube JSON response-pruning rules. Never filter HTML/documents.
+  static constexpr std::string_view kEndpoints[] = {
+      "/youtubei/v1/player",          "/youtubei/v1/get_watch",
+      "/youtubei/v1/next",            "/youtubei/v1/playlist",
+      "/youtubei/v1/reel_watch",      "/youtubei/v1/reel_watch_sequence",
+  };
+  for (const auto endpoint : kEndpoints) {
+    if (path == endpoint ||
+        (path.size() > endpoint.size() &&
+         path.compare(0, endpoint.size(), endpoint) == 0 &&
+         path[endpoint.size()] == '/')) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void ReplaceAll(std::string* s, const char* from, const char* to) {
@@ -183,7 +213,6 @@ OmniAdblockResourceHandler::GetResourceResponseFilter(
     CefRefPtr<CefRequest> request,
     CefRefPtr<CefResponse> response) {
   CEF_REQUIRE_IO_THREAD();
-  (void)frame;
   (void)response;
   if (!owner_ || !request || !AdblockService::Get().enabled()) {
     return nullptr;
@@ -192,7 +221,10 @@ OmniAdblockResourceHandler::GetResourceResponseFilter(
     return nullptr;
   }
   const std::string url = request->GetURL().ToString();
-  if (!ShouldStripYoutubePlayerAds(url)) {
+  if (!ShouldStripYoutubePlayerAds(url) ||
+      AdblockService::Get().IsAllowlisted(url) ||
+      (frame && frame->IsValid() &&
+       AdblockService::Get().IsAllowlisted(frame->GetURL().ToString()))) {
     return nullptr;
   }
   return new YoutubeAdJsonFilter();

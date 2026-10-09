@@ -7,6 +7,9 @@
 #include "omni/paths.h"
 #include "omni/utf8.h"
 
+#include "include/cef_cookie.h"
+#include "include/cef_request_context.h"
+
 #if defined(_WIN32)
 #include <windows.h>
 #include <shellapi.h>
@@ -18,6 +21,52 @@
 
 namespace omni {
 namespace {
+
+class ClearBrowsingDataCallback final : public CefCompletionCallback,
+                                        public CefDeleteCookiesCallback {
+ public:
+  explicit ClearBrowsingDataCallback(
+      CefRefPtr<CefMessageRouterBrowserSide::Callback> callback)
+      : callback_(std::move(callback)) {}
+
+  void OnComplete() override { CompletePart(true); }
+
+  void OnComplete(int num_deleted) override {
+    deleted_cookies_ = num_deleted;
+    CompletePart(true);
+  }
+
+  void FailPart() { CompletePart(false); }
+
+ private:
+  void CompletePart(bool success) {
+    success_ = success_ && success;
+    if (--pending_ > 0) {
+      return;
+    }
+    if (!callback_) {
+      return;
+    }
+    if (success_) {
+      callback_->Success(Json{{"ok", true},
+                              {"history", true},
+                              {"cache", true},
+                              {"cookies", true},
+                              {"deletedCookies", deleted_cookies_}}
+                             .dump());
+    } else {
+      callback_->Failure(500, "Failed to clear some browsing data");
+    }
+    callback_ = nullptr;
+  }
+
+  CefRefPtr<CefMessageRouterBrowserSide::Callback> callback_;
+  int pending_ = 3;
+  int deleted_cookies_ = 0;
+  bool success_ = true;
+
+  IMPLEMENT_REFCOUNTING(ClearBrowsingDataCallback);
+};
 
 bool OpenPath(const std::string& path, bool select_in_folder) {
   if (path.empty()) {
@@ -169,6 +218,29 @@ bool HandleBrowserCommand(
   if (method == "browser.clear") {
     owner->ContentClear();
     callback->Success(Json{{"ok", true}}.dump());
+    return true;
+  }
+
+  if (method == "browser.clearData") {
+    history::Clear();
+
+    auto request_context = CefRequestContext::GetGlobalContext();
+    auto cookie_manager = request_context
+                              ? request_context->GetCookieManager(nullptr)
+                              : nullptr;
+    if (!request_context || !cookie_manager) {
+      callback->Failure(500, "Browser storage is unavailable");
+      return true;
+    }
+
+    CefRefPtr<ClearBrowsingDataCallback> clear_callback =
+        new ClearBrowsingDataCallback(callback);
+    if (!cookie_manager->DeleteCookies(CefString(), CefString(),
+                                       clear_callback)) {
+      clear_callback->FailPart();
+    }
+    request_context->ClearHttpCache(clear_callback);
+    request_context->ClearHttpAuthCredentials(clear_callback);
     return true;
   }
 

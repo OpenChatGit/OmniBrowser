@@ -26,7 +26,11 @@ namespace {
 
 std::atomic<int64_t> g_agent_query_seq{1000};
 std::mutex g_pending_mu;
-std::map<int64_t, std::shared_ptr<ApiResponder>> g_pending_queries;
+struct PendingAgentQuery {
+  std::shared_ptr<ApiResponder> responder;
+  int browser_id = -1;
+};
+std::map<int64_t, PendingAgentQuery> g_pending_queries;
 
 // Helper to escape strings inside JavaScript literals
 std::string JsStringEscape(const std::string& input) {
@@ -74,8 +78,8 @@ CefRefPtr<CefFrame> TargetFrame(const ApiContext& ctx,
   CefRefPtr<CefBrowserView> view = nullptr;
   if (!tab_id.empty()) {
     view = ctx.owner->ContentViewForTab(tab_id);
-  }
-  if (!view && !ctx.owner->ActiveContentTabId().empty()) {
+    if (!view) return nullptr;
+  } else if (!ctx.owner->ActiveContentTabId().empty()) {
     view = ctx.owner->ContentViewForTab(ctx.owner->ActiveContentTabId());
   }
   if (!view) {
@@ -243,6 +247,7 @@ struct ResponderWrapper : public ApiResponder {
 std::shared_ptr<ResponderWrapper> MakeDurableResponder(
     const ApiContext& ctx,
     ApiResponder& responder,
+    CefRefPtr<CefBrowser> target_browser,
     int64_t* qid_out = nullptr) {
   std::shared_ptr<ApiResponder> sink;
   if (ctx.shared_responder) {
@@ -253,6 +258,10 @@ std::shared_ptr<ResponderWrapper> MakeDurableResponder(
     responder.Failure(500, "No durable responder for async page script");
     return nullptr;
   }
+  if (!target_browser) {
+    responder.Failure(404, "No target browser for async page script");
+    return nullptr;
+  }
   auto wrapper = std::make_shared<ResponderWrapper>(std::move(sink));
   const int64_t qid = ++g_agent_query_seq;
   if (qid_out) {
@@ -260,7 +269,7 @@ std::shared_ptr<ResponderWrapper> MakeDurableResponder(
   }
   {
     std::lock_guard<std::mutex> lock(g_pending_mu);
-    g_pending_queries[qid] = wrapper;
+    g_pending_queries[qid] = PendingAgentQuery{wrapper, target_browser->GetIdentifier()};
   }
   std::thread([qid]() {
     std::this_thread::sleep_for(std::chrono::seconds(8));
@@ -269,7 +278,7 @@ std::shared_ptr<ResponderWrapper> MakeDurableResponder(
       std::lock_guard<std::mutex> lock(g_pending_mu);
       auto it = g_pending_queries.find(qid);
       if (it != g_pending_queries.end()) {
-        target = it->second;
+        target = it->second.responder;
         g_pending_queries.erase(it);
       }
     }
@@ -313,7 +322,8 @@ void ExecuteInFrameWithCallback(const ApiContext& ctx,
                                 const std::string& code_body,
                                 ApiResponder& responder) {
   int64_t qid = 0;
-  if (!MakeDurableResponder(ctx, responder, &qid)) {
+  if (!MakeDurableResponder(ctx, responder, frame ? frame->GetBrowser() : nullptr,
+                            &qid)) {
     return;
   }
 
@@ -433,14 +443,14 @@ constexpr const char* kArticleExtractScript = R"JS(
 }  // namespace
 
 void FailPendingAgentQueries(const std::string& reason) {
-  std::map<int64_t, std::shared_ptr<ApiResponder>> pending;
+  std::map<int64_t, PendingAgentQuery> pending;
   {
     std::lock_guard<std::mutex> lock(g_pending_mu);
     pending.swap(g_pending_queries);
   }
   for (auto& entry : pending) {
-    if (entry.second) {
-      entry.second->Failure(500, reason);
+    if (entry.second.responder) {
+      entry.second.responder->Failure(500, reason);
     }
   }
   DevToolsClient::Get().FailAll(reason);
@@ -457,16 +467,25 @@ void RegisterAgentApis() {
   api.Register(
       "agent.callback",
       [](const ApiContext& ctx, const Json& params, ApiResponder& responder) {
-        (void)ctx;
         const int64_t qid = params.value("queryId", static_cast<int64_t>(0));
         std::shared_ptr<ApiResponder> target = nullptr;
+        bool wrong_browser = false;
         {
           std::lock_guard<std::mutex> lock(g_pending_mu);
           auto it = g_pending_queries.find(qid);
           if (it != g_pending_queries.end()) {
-            target = it->second;
-            g_pending_queries.erase(it);
+            if (!ctx.browser || !ctx.frame || !ctx.frame->IsMain() ||
+                it->second.browser_id != ctx.browser->GetIdentifier()) {
+              wrong_browser = true;
+            } else {
+              target = it->second.responder;
+              g_pending_queries.erase(it);
+            }
           }
+        }
+        if (wrong_browser) {
+          responder.Failure(403, "Agent callback came from the wrong tab");
+          return;
         }
         if (target) {
           if (params.contains("error") && !params["error"].is_null()) {
@@ -479,57 +498,63 @@ void RegisterAgentApis() {
               const std::string action = data.value("action", "click");
               const std::string selector = data.value("selector", "");
               const std::string value = data.value("value", "");
-              if (auto* handler = OmniHandler::GetInstance()) {
-                handler->MoveAgentPointer(x, y, true);
+              CefRefPtr<CefBrowser> target_browser = ctx.browser;
+              auto* handler = OmniHandler::GetInstance();
+              bool is_active_target = false;
+              if (handler && !handler->ActiveContentTabId().empty()) {
+                if (auto active_view = handler->ContentViewForTab(
+                        handler->ActiveContentTabId())) {
+                  if (auto active_browser = active_view->GetBrowser()) {
+                    is_active_target = active_browser->GetIdentifier() ==
+                                       target_browser->GetIdentifier();
+                  }
+                }
+              }
+              if (handler && is_active_target) {
+                handler->MoveAgentPointer(x, y, action == "click");
               }
               CefPostDelayedTask(
                   TID_UI,
                   base::BindOnce(
-                      [](std::shared_ptr<ApiResponder> reply, float px,
+                      [](std::shared_ptr<ApiResponder> reply,
+                         CefRefPtr<CefBrowser> browser, bool active_target, float px,
                          float py, std::string act, std::string sel,
                          std::string val) {
-                        auto* handler = OmniHandler::GetInstance();
-                        if (handler && act == "click") {
-                          handler->SendAgentMouseClick(static_cast<int>(px),
-                                                       static_cast<int>(py));
-                        }
-                        if (handler && !sel.empty()) {
-                          CefRefPtr<CefFrame> frame;
-                          if (auto view = handler->content_browser_view()) {
-                            if (auto browser = view->GetBrowser()) {
-                              frame = browser->GetMainFrame();
-                            }
+                        if (McpServer::Get().AreAgentsPaused()) {
+                          if (reply) {
+                            reply->Failure(403, "Agent control is paused by the user");
                           }
-                          if (frame && frame->IsValid()) {
-                            if (act == "click") {
-                              frame->ExecuteJavaScript(
-                                  "var el=document.querySelector('" +
-                                      JsStringEscape(sel) +
-                                      "'); if(el) el.click();",
-                                  frame->GetURL(), 0);
-                            } else if (act == "fill") {
-                              std::string body =
-                                  "var el=document.querySelector('" +
-                                  JsStringEscape(sel) +
-                                  "'); if(!el) return;"
-                                  "el.focus();"
-                                  "var proto=el.tagName==='TEXTAREA'?"
-                                  "HTMLTextAreaElement.prototype:"
-                                  "HTMLInputElement.prototype;"
-                                  "var desc=Object.getOwnPropertyDescriptor("
-                                  "proto,'value');"
-                                  "var val='" +
-                                  JsStringEscape(val) +
-                                  "';"
-                                  "if(desc&&desc.set) desc.set.call(el,val);"
-                                  "else el.value=val;"
-                                  "el.dispatchEvent(new Event('input',"
-                                  "{bubbles:true}));"
-                                  "el.dispatchEvent(new Event('change',"
-                                  "{bubbles:true}));";
-                              frame->ExecuteJavaScript(body, frame->GetURL(),
-                                                       0);
-                            }
+                          return;
+                        }
+                        if (browser && browser->GetHost() && act == "click" &&
+                            active_target) {
+                          CefMouseEvent ev;
+                          ev.x = static_cast<int>(px);
+                          ev.y = static_cast<int>(py);
+                          browser->GetHost()->SendMouseMoveEvent(ev, false);
+                          browser->GetHost()->SendMouseClickEvent(ev, MBT_LEFT, false, 1);
+                          browser->GetHost()->SendMouseClickEvent(ev, MBT_LEFT, true, 1);
+                        } else if (browser && act == "click" && !sel.empty()) {
+                          if (auto frame = browser->GetMainFrame(); frame && frame->IsValid()) {
+                            frame->ExecuteJavaScript(
+                                "(function(){var el=document.querySelector('" +
+                                    JsStringEscape(sel) + "');if(el)el.click();})();",
+                                frame->GetURL(), 0);
+                          }
+                        } else if (browser && act == "fill" && !sel.empty()) {
+                          if (auto frame = browser->GetMainFrame(); frame && frame->IsValid()) {
+                            std::string body =
+                                "(function(){var el=document.querySelector('" +
+                                JsStringEscape(sel) +
+                                "');if(!el)return;el.focus();"
+                                "var proto=el.tagName==='TEXTAREA'?"
+                                "HTMLTextAreaElement.prototype:HTMLInputElement.prototype;"
+                                "var desc=Object.getOwnPropertyDescriptor(proto,'value');"
+                                "var val='" + JsStringEscape(val) + "';"
+                                "if(desc&&desc.set)desc.set.call(el,val);else el.value=val;"
+                                "el.dispatchEvent(new Event('input',{bubbles:true}));"
+                                "el.dispatchEvent(new Event('change',{bubbles:true}));})();";
+                            frame->ExecuteJavaScript(body, frame->GetURL(), 0);
                           }
                         }
                         if (reply) {
@@ -543,7 +568,8 @@ void RegisterAgentApis() {
                                   .dump());
                         }
                       },
-                      target, x, y, action, selector, value),
+                      target, target_browser, is_active_target, x, y, action,
+                      selector, value),
                   280);
             } else {
               target->Success(
@@ -589,7 +615,7 @@ void RegisterAgentApis() {
           responder.Failure(404, "No active content page found");
           return;
         }
-        auto wrapper = MakeDurableResponder(ctx, responder);
+        auto wrapper = MakeDurableResponder(ctx, responder, browser);
         if (!wrapper) {
           return;
         }
@@ -735,7 +761,7 @@ void RegisterAgentApis() {
           responder.Failure(404, "No active content page found");
           return;
         }
-        auto wrapper = MakeDurableResponder(ctx, responder);
+        auto wrapper = MakeDurableResponder(ctx, responder, browser);
         if (!wrapper) {
           return;
         }
@@ -787,6 +813,16 @@ void RegisterAgentApis() {
         (void)params;
         McpServer::Get().PauseAgents();
         responder.Success(Json{{"ok", true}, {"paused", true}}.dump());
+      },
+      ApiExposure::UiOnly);
+
+  api.Register(
+      "agent.resume",
+      [](const ApiContext& ctx, const Json& params, ApiResponder& responder) {
+        (void)ctx;
+        (void)params;
+        McpServer::Get().ResumeAgents();
+        responder.Success(Json{{"ok", true}, {"paused", false}}.dump());
       },
       ApiExposure::UiOnly);
 }

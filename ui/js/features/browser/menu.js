@@ -142,6 +142,28 @@
           }
           break;
         case "clear-data":
+          if (
+            !window.confirm(
+              "Clear browsing history, cookies, cached files, and saved HTTP sign-in credentials for this browser profile? You may be signed out of websites."
+            )
+          ) {
+            break;
+          }
+          if (!window.OmniBridge || typeof OmniBridge.call !== "function") {
+            window.alert("Could not clear browsing data: native browser API unavailable.");
+            break;
+          }
+          OmniBridge.call("browser.clearData", {})
+            .then((result) => {
+              if (!result || result.ok !== true) {
+                throw new Error("The browser did not confirm the deletion.");
+              }
+              window.alert("Browsing history, cookies, cached files, and saved HTTP sign-in credentials were cleared.");
+            })
+            .catch((error) => {
+              console.error("Failed to clear browsing data", error);
+              window.alert(`Could not clear browsing data: ${error.message || error}`);
+            });
           break;
         case "adblock-changed":
           if (

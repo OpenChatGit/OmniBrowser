@@ -1,4 +1,5 @@
 #include "omni/window_commands.h"
+#include "omni/build_config.h"
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -183,7 +184,7 @@ bool HandleWindowCommand(
     const bool private_mode = paths::IsPrivateMode();
     callback->Success(Json{{"devMode", IsDevMode()},
                            {"name", private_mode ? "Omni Private" : "Omni Browser"},
-                           {"version", "0.1.0"},
+                           {"version", OMNI_APP_VERSION},
                            {"private", private_mode}}
                           .dump());
     return true;

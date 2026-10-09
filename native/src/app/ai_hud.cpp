@@ -45,22 +45,18 @@ int ClampInt(int v, int lo, int hi) {
   return std::max(lo, std::min(v, hi));
 }
 
-// Distance from (x,y) to the inside of a rect whose bottom corners are
-// rounded. Negative = outside the quarter-circles (the square overflow).
+// Signed distance to the inside of a rounded rectangle. Using one rounded
+// rectangle distance field keeps the glow continuous where adjacent edges
+// meet, instead of leaving a diagonal seam from choosing the nearest edge.
 float EdgeDistance(float x, float y, float w, float h, float radius) {
-  if (radius > 0.5f) {
-    if (x < radius && y > h - radius) {
-      const float dx = radius - x;
-      const float dy = y - (h - radius);
-      return radius - std::sqrt(dx * dx + dy * dy);
-    }
-    if (x > w - radius && y > h - radius) {
-      const float dx = x - (w - radius);
-      const float dy = y - (h - radius);
-      return radius - std::sqrt(dx * dx + dy * dy);
-    }
-  }
-  return (std::min)((std::min)(x, w - x), (std::min)(y, h - y));
+  const float r = (std::max)(0.0f, (std::min)(radius, (std::min)(w, h) * 0.5f));
+  const float qx = std::abs(x - w * 0.5f) - (w * 0.5f - r);
+  const float qy = std::abs(y - h * 0.5f) - (h * 0.5f - r);
+  const float ox = (std::max)(qx, 0.0f);
+  const float oy = (std::max)(qy, 0.0f);
+  const float outside = std::sqrt(ox * ox + oy * oy);
+  const float inside = (std::min)((std::max)(qx, qy), 0.0f);
+  return r - (outside + inside);
 }
 
 HBITMAP CreatePargbDib(int w, int h, void** bits) {
@@ -461,6 +457,19 @@ void AiHudOverlay::SetActive(bool active, int agent_count) {
   ApplyVisibility();
 }
 
+void AiHudOverlay::SetPaused(bool paused) {
+  paused_ = paused;
+  if (paused_) {
+    cursor_shown_ = false;
+    cursor_x_ = -1.0f;
+    cursor_anim_ms_ = 0;
+    click_pulse_start_ = 0;
+  }
+  if (hwnd_ && active_) {
+    Paint();
+  }
+}
+
 void AiHudOverlay::Layout(int chrome_height_dip) {
   chrome_height_dip_ = std::max(0, chrome_height_dip);
   if (!parent_ || !hwnd_) {
@@ -762,7 +771,8 @@ void AiHudOverlay::EnsurePillCache(const Metrics& m) {
     return;
   }
   if (pill_dib_ && pill_w_ == w && pill_h_ == h &&
-      pill_cache_count_ == agent_count_ && pill_cache_hover_ == hover_button_) {
+      pill_cache_count_ == agent_count_ && pill_cache_hover_ == hover_button_ &&
+      pill_cache_paused_ == paused_) {
     return;
   }
   if (pill_dib_) {
@@ -775,6 +785,7 @@ void AiHudOverlay::EnsurePillCache(const Metrics& m) {
   pill_h_ = h;
   pill_cache_count_ = agent_count_;
   pill_cache_hover_ = hover_button_;
+  pill_cache_paused_ = paused_;
   if (!pill_dib_ || !pill_bits_) {
     return;
   }
@@ -818,7 +829,9 @@ void AiHudOverlay::EnsurePillCache(const Metrics& m) {
   g.SetCompositingMode(Gdiplus::CompositingModeSourceOver);
   g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
   g.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHalf);
-  std::wstring label = agent_count_ > 1
+  std::wstring label = paused_
+                           ? L"Agents Paused"
+                           : agent_count_ > 1
                            ? std::to_wstring(agent_count_) + L" Agents"
                            : L"Agent Controlled";
   Gdiplus::FontFamily family(L"Segoe UI");
@@ -835,7 +848,8 @@ void AiHudOverlay::EnsurePillCache(const Metrics& m) {
   Gdiplus::SolidBrush btn_text(hover_button_
                                    ? Gdiplus::Color(255, 255, 157, 157)
                                    : Gdiplus::Color(255, 245, 245, 245));
-  FillAlignedText(&g, L"Take Control", family, Gdiplus::FontStyleBold,
+  FillAlignedText(&g, paused_ ? L"Resume" : L"Take Control", family,
+                  Gdiplus::FontStyleBold,
                   static_cast<Gdiplus::REAL>(DipToPx(12)), brc, btn_text,
                   Gdiplus::StringAlignmentCenter);
 }
@@ -990,9 +1004,7 @@ void AiHudOverlay::Paint() {
   }
 
   const int depth = DipToPx(42);
-  const float corner = (parent_ && IsZoomed(parent_))
-                           ? 0.0f
-                           : static_cast<float>(DipToPx(8));
+  const float corner = static_cast<float>(DipToPx(8));
   const bool rebuilt =
       glow_w_ != m.width || glow_h_ != m.height || glow_depth_ != depth ||
       glow_corner_ != corner;
@@ -1055,7 +1067,11 @@ void AiHudOverlay::Paint() {
 void AiHudOverlay::OnClick(POINT pt) {
   const Metrics m = ComputeMetrics();
   if (PointInRect(pt, m.button)) {
-    McpServer::Get().PauseAgents();
+    if (paused_) {
+      McpServer::Get().ResumeAgents();
+    } else {
+      McpServer::Get().PauseAgents();
+    }
   }
 }
 
@@ -1132,6 +1148,7 @@ AiHudOverlay::AiHudOverlay() = default;
 AiHudOverlay::~AiHudOverlay() = default;
 void AiHudOverlay::Detach() {}
 void AiHudOverlay::SetActive(bool, int) {}
+void AiHudOverlay::SetPaused(bool) {}
 void AiHudOverlay::Layout(int) {}
 void AiHudOverlay::MovePointer(float, float, bool) {}
 

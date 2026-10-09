@@ -26,6 +26,7 @@ class AiHudOverlay {
 #endif
   void Detach();
   void SetActive(bool active, int agent_count);
+  void SetPaused(bool paused);
   void Layout(int chrome_height_dip);
   // Overlay-pixel position of the visible agent cursor. click starts a
   // ripple after the move lands so the user sees the press.
@@ -73,6 +74,7 @@ class AiHudOverlay {
   HWND parent_ = nullptr;
   HWND hwnd_ = nullptr;
   bool hover_button_ = false;
+  bool paused_ = false;
   UINT_PTR timer_ = 0;
   UINT timer_ms_ = 0;
   ULONGLONG start_tick_ = 0;
@@ -106,6 +108,7 @@ class AiHudOverlay {
   int pill_h_ = 0;
   int pill_cache_count_ = -1;
   bool pill_cache_hover_ = false;
+  bool pill_cache_paused_ = false;
   HBITMAP cursor_dib_ = nullptr;
   void* cursor_bits_ = nullptr;
   int cursor_dib_w_ = 0;

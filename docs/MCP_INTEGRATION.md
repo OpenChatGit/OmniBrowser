@@ -1,6 +1,6 @@
-# OmniBrowser MCP (Model Context Protocol) & ACP Integration
+# OmniBrowser MCP (Model Context Protocol) Integration
 
-OmniBrowser includes native, built-in support for **Model Context Protocol (MCP)** and **Agent Control Protocol (ACP)**, enabling AI assistants (Claude Desktop, Cursor, Antigravity, Cline, Windsurf, LangChain / AutoGPT / Custom LLM Agents) to interact directly with the browser, inspect tabs, extract structured content, and automate web actions.
+OmniBrowser includes a native **Model Context Protocol (MCP)** server, enabling MCP clients such as Claude Desktop, Cursor, Cline, and custom agents to inspect tabs, extract page content, and automate browser actions.
 
 ---
 
@@ -12,8 +12,8 @@ OmniBrowser includes native, built-in support for **Model Context Protocol (MCP)
   - `prompts/list` & `prompts/get` for preconfigured browser research & summarization templates.
 - **Dual Transports**:
   - **Stdio Transport (MCP standard)**: `OmniBrowser.exe --mcp` is a lightweight JSON-RPC host on stdin/stdout (no CEF in that process). It starts the GUI if needed and proxies tool calls to `http://127.0.0.1:8999/mcp`. Tool failures, timeouts, disconnects, and crashes are returned to the agent as `tools/call` results with `isError: true`.
-  - **Local HTTP / SSE Transport**: The running GUI serves `http://127.0.0.1:8999/` with `/sse`, `/message`, and `/mcp`.
-- **Agent HUD**: While any agent is controlling the browser, an "Agent Controlled" pill is shown in the main view (over internet pages and native UI). Use **Take Control** to pause agent chrome.
+  - **Local HTTP / SSE Transport**: The running GUI serves `http://127.0.0.1:8999/` with `/sse`, `/message`, and `/mcp`. Access is limited to local clients and loopback origins.
+- **Agent HUD**: While an MCP client is controlling the browser, an "Agent Controlled" pill is shown. Use **Take Control** to pause commands; use **Resume** in the pill to allow commands again.
 - **No External Puppeteer/Playwright Overhead**: Directly interfaces with OmniBrowser's native CEF (Chromium) engine and tab lifecycle.
 
 ---

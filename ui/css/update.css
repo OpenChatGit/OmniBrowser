@@ -131,23 +131,11 @@ html[data-theme="light"] .topbar-actions .topbar-btn-update.is-open {
   gap: 10px;
 }
 
-.update-flyout-badge-icon {
-  width: 32px;
+.update-flyout-logo {
+  width: 27px;
   height: 32px;
-  border-radius: 8px;
-  background: var(--fill-02);
-  color: var(--text);
-  border: 1px solid var(--stroke-01);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.update-flyout-badge-icon .icon {
-  width: 17px;
-  height: 17px;
-  stroke-width: 2px;
+  object-fit: contain;
+  flex: 0 0 auto;
 }
 
 .update-flyout-header-text {

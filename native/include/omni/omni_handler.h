@@ -147,6 +147,7 @@ class OmniHandler : public CefClient,
   void HideFindBar();
 
   void SetAiActive(bool active, int agent_count = 1);
+  void SetAiPaused(bool paused);
   bool is_ai_active() const { return ai_active_; }
   void LayoutAiHud();
   void DestroyAiHud();
@@ -354,6 +355,7 @@ class OmniHandler : public CefClient,
   bool history_flyout_visible_ = false;
   bool ai_active_ = false;
   int ai_agent_count_ = 0;
+  bool ai_paused_ = false;
   std::unique_ptr<AiHudOverlay> ai_hud_;
   int overlay_anchor_right_ = 0;
   int overlay_anchor_top_ = 0;

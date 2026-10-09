@@ -82,6 +82,8 @@ class McpServer {
   bool IsShuttingDown() const { return shutting_down_; }
   int GetHttpPort() const { return http_port_; }
   void PauseAgents();
+  void ResumeAgents();
+  bool AreAgentsPaused() const { return agents_paused_; }
 
  private:
   McpServer();
@@ -128,6 +130,7 @@ class McpServer {
   std::atomic<bool> shutting_down_{false};
   std::atomic<bool> http_running_{false};
   std::atomic<bool> stdio_running_{false};
+  std::atomic<bool> agents_paused_{false};
   int http_port_ = 8999;
 
   std::unique_ptr<std::thread> http_thread_;

@@ -38,7 +38,8 @@ html:has(body.is-history) {
 }
 
 body.is-media,
-body.is-shields {
+body.is-shields,
+body.is-update {
   background: var(--bg-panel);
 }
 
@@ -195,6 +196,19 @@ body.is-shields {
   box-shadow: none;
   color: var(--text);
   font-family: inherit;
+  pointer-events: auto;
+}
+
+/* Update details render in the native overlay view so the content view cannot
+   cover the panel, matching the other topbar dropdowns. */
+#overlay-root .update-flyout {
+  position: relative;
+  inset: auto;
+  width: 320px;
+  box-sizing: border-box;
+  border-radius: 0;
+  box-shadow: none;
+  animation: none;
   pointer-events: auto;
 }
 

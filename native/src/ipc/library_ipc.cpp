@@ -22,7 +22,6 @@ class LibraryIpcHandler : public CefMessageRouterBrowserSide::Handler {
                bool persistent,
                CefRefPtr<Callback> callback) override {
     CEF_REQUIRE_UI_THREAD();
-    (void)frame;
 
     const Json req = Json::parse(request.ToString(), nullptr, false);
     if (req.is_discarded() || !req.is_object()) {
@@ -38,6 +37,7 @@ class LibraryIpcHandler : public CefMessageRouterBrowserSide::Handler {
     ApiContext ctx;
     ctx.owner = owner_;
     ctx.browser = browser;
+    ctx.frame = frame;
     ctx.method = method;
     ctx.query_id = query_id;
     ctx.persistent = persistent;

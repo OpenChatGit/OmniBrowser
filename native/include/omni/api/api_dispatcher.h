@@ -27,6 +27,7 @@ class ApiResponder;
 struct ApiContext {
   OmniHandler* owner = nullptr;
   CefRefPtr<CefBrowser> browser;
+  CefRefPtr<CefFrame> frame;
   /** Full RPC method name (e.g. browser.navigate). */
   std::string method;
   int64_t query_id = 0;
@@ -92,8 +93,6 @@ class ApiDispatcher {
                 const ApiContext& ctx,
                 const Json& params,
                 ApiResponder& responder) const;
-
-  bool IsRemoteSafe(std::string_view method) const;
 
   /** Catalog of exact methods and prefix wildcards for api.list. */
   nlohmann::json ListCatalog() const;

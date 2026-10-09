@@ -147,16 +147,9 @@
       aiPauseBtn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
-        aiPaused = true;
-        if (aiActiveTimer) {
-          window.clearTimeout(aiActiveTimer);
-          aiActiveTimer = 0;
-        }
-        document.body.classList.remove("ai-active");
-        if (root) root.classList.remove("ai-active");
-        if (aiPill) aiPill.hidden = true;
-        if (window.OmniBridge && typeof OmniBridge.agentPause === "function") {
-          OmniBridge.agentPause().catch(() => {});
+        const method = aiPaused ? "agentResume" : "agentPause";
+        if (window.OmniBridge && typeof OmniBridge[method] === "function") {
+          OmniBridge[method]().catch(() => {});
         }
       });
     }
@@ -2459,17 +2452,29 @@
       }
       if (msg.type === "ai.active" || msg.type === "ai.status") {
         const isActive = Boolean(msg.active);
+        aiPaused = Boolean(msg.paused);
+        const pauseLabel = aiPaused ? "Resume" : "Take Control";
+        if (aiPauseBtn) {
+          aiPauseBtn.setAttribute("aria-label", aiPaused ? "Resume agents" : "Take Control");
+          const label = aiPauseBtn.querySelector("span:last-child");
+          if (label) label.textContent = pauseLabel;
+        }
+        if (aiPill) {
+          const text = aiPill.querySelector(".ai-control-pill-text");
+          if (text && aiPaused) text.textContent = "Agents Paused";
+          aiPill.hidden = !isActive || Boolean(msg.nativeHud);
+        }
+        document.body.classList.toggle("ai-paused", aiPaused);
+        if (root) root.classList.toggle("ai-paused", aiPaused);
         if (isActive) {
-          aiPaused = false;
-          document.body.classList.add("ai-active");
-          if (root) root.classList.add("ai-active");
+          document.body.classList.toggle("ai-active", !aiPaused);
+          if (root) root.classList.toggle("ai-active", !aiPaused);
           if (aiPill) {
             const text = aiPill.querySelector(".ai-control-pill-text");
             const count = Number(msg.agentCount) || 0;
-            if (text) {
+            if (text && !aiPaused) {
               text.textContent = count > 1 ? count + " Agents" : "Agent Controlled";
             }
-            aiPill.hidden = true;
           }
           if (aiActiveTimer) {
             window.clearTimeout(aiActiveTimer);
@@ -2481,7 +2486,9 @@
             aiActiveTimer = 0;
           }
           document.body.classList.remove("ai-active");
+          document.body.classList.remove("ai-paused");
           if (root) root.classList.remove("ai-active");
+          if (root) root.classList.remove("ai-paused");
           if (aiPill) aiPill.hidden = true;
         }
         return;

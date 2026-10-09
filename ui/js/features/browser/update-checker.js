@@ -4,8 +4,10 @@
   const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
   const INITIAL_DELAY_MS = 300; // immediate display for preview
 
-  let currentAppVersion = "0.1.0";
+  let currentAppVersion = "0.1.1";
   let activeReleaseData = null;
+  let flyoutOpen = false;
+  let devMode = false;
 
   function parseSemVer(v) {
     if (!v) return [0, 0, 0];
@@ -18,8 +20,8 @@
     return parts;
   }
 
-  // For visual testing: accept newer or equal version so user can review the UI design
-  function isNewerOrEqual(latestStr, currentStr) {
+  // Compare numeric SemVer components; prerelease suffixes do not affect this updater.
+  function isNewer(latestStr, currentStr) {
     const latest = parseSemVer(latestStr);
     const current = parseSemVer(currentStr);
 
@@ -27,8 +29,7 @@
       if (latest[i] > current[i]) return true;
       if (latest[i] < current[i]) return false;
     }
-    // Equal version also returns true during preview
-    return true;
+    return false;
   }
 
   function isNewer(latestStr, currentStr) {
@@ -41,6 +42,7 @@
         const info = await window.OmniBridge.call("app.info");
         if (info && info.version) {
           currentAppVersion = info.version;
+          devMode = Boolean(info.devMode);
         }
       } catch (err) {
         // Fallback to default
@@ -69,19 +71,11 @@
   function showUpdate(release) {
     activeReleaseData = release;
     const wrap = document.getElementById("browser-update-wrap");
-    const versionEl = document.getElementById("update-flyout-version");
-    const notesEl = document.getElementById("update-flyout-notes");
-    const linkEl = document.getElementById("update-flyout-link");
     const btn = document.getElementById("browser-update-btn");
 
     if (!wrap || !btn) return;
 
     const versionTag = release.tag_name || "New Version";
-    if (versionEl) versionEl.textContent = versionTag;
-    if (notesEl) notesEl.textContent = formatReleaseNotes(release.body);
-    if (linkEl) {
-      linkEl.href = release.html_url || `https://github.com/${REPO}/releases`;
-    }
     btn.setAttribute("data-tooltip", `Update ${versionTag} available`);
 
     wrap.hidden = false;
@@ -98,37 +92,47 @@
   }
 
   function openFlyout() {
-    const flyout = document.getElementById("browser-update-flyout");
     const btn = document.getElementById("browser-update-btn");
-    if (!flyout || !btn) return;
-
-    flyout.hidden = false;
+    if (!btn || !activeReleaseData || !window.OmniBridge || typeof OmniBridge.overlayShow !== "function") return;
+    const rect = btn.getBoundingClientRect();
+    const width = 320;
+    const right = Math.max(width + 8, Math.min(Math.round(rect.right), window.innerWidth - 8));
+    OmniBridge.overlayShow({
+      anchorRight: right,
+      anchorTop: Math.round(rect.bottom + 8),
+      width,
+      height: 0,
+      payload: {
+        view: "update",
+        version: activeReleaseData.tag_name || "New Version",
+        notes: formatReleaseNotes(activeReleaseData.body),
+        releaseUrl: activeReleaseData.html_url || `https://github.com/${REPO}/releases`,
+      },
+    }).catch(() => {});
+    flyoutOpen = true;
     btn.classList.add("is-open");
     btn.setAttribute("aria-expanded", "true");
-
-    if (window.OmniIcons && typeof window.OmniIcons.refresh === "function") {
-      window.OmniIcons.refresh();
-    }
   }
 
   function closeFlyout() {
-    const flyout = document.getElementById("browser-update-flyout");
-    const btn = document.getElementById("browser-update-btn");
-    if (!flyout || !btn) return;
+    if (flyoutOpen && window.OmniBridge && typeof OmniBridge.overlayHide === "function") {
+      OmniBridge.overlayHide().catch(() => {});
+    }
+    markFlyoutClosed();
+  }
 
-    flyout.hidden = true;
-    btn.classList.remove("is-open");
-    btn.setAttribute("aria-expanded", "false");
+  function markFlyoutClosed() {
+    const btn = document.getElementById("browser-update-btn");
+    flyoutOpen = false;
+    if (btn) {
+      btn.classList.remove("is-open");
+      btn.setAttribute("aria-expanded", "false");
+    }
   }
 
   function toggleFlyout() {
-    const flyout = document.getElementById("browser-update-flyout");
-    if (!flyout) return;
-    if (flyout.hidden) {
-      openFlyout();
-    } else {
-      closeFlyout();
-    }
+    if (flyoutOpen) closeFlyout();
+    else openFlyout();
   }
 
   async function checkForUpdates() {
@@ -143,16 +147,22 @@
 
       if (response.ok) {
         const release = await response.json();
-        if (release && release.tag_name && isNewerOrEqual(release.tag_name, current)) {
+        if (release && release.tag_name && isNewer(release.tag_name, current)) {
           showUpdate(release);
           return release;
         }
+        hideUpdate();
+        return null;
       }
     } catch (err) {
       // Quietly ignore network failures
     }
 
-    // Preview fallback: Show update button with current version so the design can be inspected
+    // Keep the preview button available only in development builds.
+    if (!devMode) {
+      hideUpdate();
+      return null;
+    }
     const previewRelease = {
       tag_name: "v" + current,
       name: "OmniBrowser v" + current,
@@ -165,10 +175,6 @@
 
   function init() {
     const btn = document.getElementById("browser-update-btn");
-    const closeBtn = document.getElementById("update-flyout-close");
-    const dismissBtn = document.getElementById("update-flyout-dismiss");
-    const linkEl = document.getElementById("update-flyout-link");
-    const flyout = document.getElementById("browser-update-flyout");
 
     if (btn) {
       btn.addEventListener("click", (e) => {
@@ -177,40 +183,11 @@
       });
     }
 
-    if (closeBtn) {
-      closeBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        closeFlyout();
-      });
+    if (window.OmniBridge && typeof OmniBridge.overlaySubscribe === "function") {
+      OmniBridge.overlaySubscribe((msg, err) => {
+        if (!err && msg && msg.type === "hide") markFlyoutClosed();
+      }).catch(() => {});
     }
-
-    if (dismissBtn) {
-      dismissBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        closeFlyout();
-      });
-    }
-
-    if (linkEl) {
-      linkEl.addEventListener("click", () => {
-        setTimeout(closeFlyout, 200);
-      });
-    }
-
-    // Dismiss on outside click
-    document.addEventListener("click", (e) => {
-      if (!flyout || flyout.hidden) return;
-      if (!flyout.contains(e.target) && !btn.contains(e.target)) {
-        closeFlyout();
-      }
-    });
-
-    // Dismiss on Escape
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && flyout && !flyout.hidden) {
-        closeFlyout();
-      }
-    });
 
     // Initial check after delay
     setTimeout(checkForUpdates, INITIAL_DELAY_MS);

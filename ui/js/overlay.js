@@ -401,6 +401,57 @@
     requestAnimationFrame(reportSize);
   }
 
+  function renderUpdate(payload) {
+    document.body.classList.remove(
+      "is-tab-tip", "is-history", "is-media", "is-shields", "is-find"
+    );
+    document.body.classList.add("is-update");
+    const data = payload || {};
+    lastReportW = 0;
+    lastReportH = 0;
+    panel = el("div", "update-flyout");
+    layout = panel;
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-labelledby", "update-flyout-title");
+
+    const header = el("div", "update-flyout-header");
+    const badge = el("div", "update-flyout-badge-wrap");
+    const icon = el("img", "update-flyout-logo");
+    icon.src = "assets/QuBrain-new/q-white.svg";
+    icon.alt = "OmniBrowser";
+    const headerText = el("div", "update-flyout-header-text");
+    headerText.append(el("span", "update-flyout-title", "Update Available"));
+    headerText.lastChild.id = "update-flyout-title";
+    headerText.append(el("span", "update-flyout-version", data.version || "New version"));
+    badge.append(icon, headerText);
+    const close = el("button", "update-flyout-close");
+    close.type = "button";
+    close.setAttribute("aria-label", "Close update panel");
+    close.innerHTML = '<i data-lucide="x" class="icon"></i>';
+    close.addEventListener("click", () => window.OmniBridge?.overlayHide?.().catch(() => {}));
+    header.append(badge, close);
+    panel.append(header);
+
+    const content = el("div", "update-flyout-content");
+    content.append(el("p", "update-flyout-notes", data.notes || "A new version of OmniBrowser is available."));
+    panel.append(content);
+    const actions = el("div", "update-flyout-actions");
+    const link = el("a", "update-btn-release");
+    link.href = data.releaseUrl || "https://github.com/OpenChatGit/OmniBrowser/releases";
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.innerHTML = '<i data-lucide="download" class="icon"></i><span>Download Release</span>';
+    link.addEventListener("click", () => setTimeout(() => window.OmniBridge?.overlayHide?.().catch(() => {}), 200));
+    const later = el("button", "update-btn-dismiss", "Later");
+    later.type = "button";
+    later.addEventListener("click", () => window.OmniBridge?.overlayHide?.().catch(() => {}));
+    actions.append(link, later);
+    panel.append(actions);
+    root.replaceChildren(panel);
+    observeSize();
+    requestAnimationFrame(reportSize);
+  }
+
   function historyCommandForItem(item) {
     if (!item || typeof item !== "object") {
       return null;
@@ -870,6 +921,7 @@
       "is-history",
       "is-media",
       "is-shields",
+      "is-update",
       "is-find"
     );
     root.replaceChildren();
@@ -887,6 +939,8 @@
         renderHistory(payload);
       } else if (payload.view === "media") {
         renderMedia(payload);
+      } else if (payload.view === "update") {
+        renderUpdate(payload);
       } else if (payload.view === "shields") {
         renderShields(payload);
       } else if (payload.view === "find") {

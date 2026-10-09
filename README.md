@@ -4,7 +4,7 @@ Desktop browser: **C++** host + **CEF** (Chromium). No Electron, no Tauri. **Win
 
 Default search is **QuBrain Search**. Chrome, tabs, start page, private windows, and library pages (History, Bookmarks, Downloads) live in this repo.
 
-Native **MCP (Model Context Protocol)** and **ACP (Agent Control Protocol)** server support allows AI assistants (Claude, Cursor, Antigravity, custom agents) to directly control tabs, navigate, extract markdown content, and execute browser interactions. See [MCP Integration Documentation](docs/MCP_INTEGRATION.md).
+Native **MCP (Model Context Protocol)** server support allows AI assistants (Claude, Cursor, Antigravity, custom agents) to control tabs, navigate, extract page content, and perform browser interactions. See [MCP Integration Documentation](docs/MCP_INTEGRATION.md).
 
 ---
 

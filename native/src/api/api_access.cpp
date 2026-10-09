@@ -72,8 +72,7 @@ bool PathUnderUiRoot(const std::string& file_url) {
 
 bool IsWebContentAllowedMethod(std::string_view method) {
   return method == "browser.media" || method == "browser.audio" ||
-         method == "browser.adblock.classId" || method == "agent.callback" ||
-         method == "agent.pause";
+         method == "browser.adblock.classId" || method == "agent.callback";
 }
 
 bool IsTrustedUiAllowedMethod(std::string_view method) {

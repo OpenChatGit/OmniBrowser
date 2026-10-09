@@ -1945,11 +1945,19 @@ void OmniHandler::HideFindBar() {
 
 void OmniHandler::SetAiActive(bool active, int agent_count) {
   CEF_REQUIRE_UI_THREAD();
+#if defined(OS_WIN)
+  constexpr bool native_hud = true;
+#else
+  constexpr bool native_hud = false;
+#endif
   ai_active_ = active;
+  ai_paused_ = false;
   ai_agent_count_ = active ? std::max(1, agent_count) : 0;
   EmitBrowserEvent(Json{
       {"type", "ai.active"},
       {"active", active},
+      {"paused", false},
+      {"nativeHud", native_hud},
       {"agentCount", ai_agent_count_},
   });
   LayoutAiHud();
@@ -1961,6 +1969,26 @@ void OmniHandler::SetAiActive(bool active, int agent_count) {
                        }),
                        64);
   }
+}
+
+void OmniHandler::SetAiPaused(bool paused) {
+  CEF_REQUIRE_UI_THREAD();
+#if defined(OS_WIN)
+  constexpr bool native_hud = true;
+#else
+  constexpr bool native_hud = false;
+#endif
+  ai_paused_ = paused;
+  ai_active_ = paused;
+  ai_agent_count_ = 0;
+  EmitBrowserEvent(Json{
+      {"type", "ai.active"},
+      {"active", paused},
+      {"paused", paused},
+      {"nativeHud", native_hud},
+      {"agentCount", 0},
+  });
+  LayoutAiHud();
 }
 
 void OmniHandler::LayoutAiHud() {
@@ -1983,6 +2011,7 @@ void OmniHandler::LayoutAiHud() {
   }
   ai_hud_->Attach(parent);
   ai_hud_->SetActive(ai_active_, ai_agent_count_);
+  ai_hud_->SetPaused(ai_paused_);
   ai_hud_->Layout(chrome_height_);
 #endif
 }
@@ -2605,7 +2634,7 @@ void OmniHandler::OnLoadEnd(CefRefPtr<CefBrowser> browser,
   MarkContentSeedIdle(browser);
   const std::string tab_id = TabIdForContentBrowser(browser);
   FlushPendingContentUrl(tab_id);
-  InjectScrollbarStyles(frame);
+  InjectContentPageScripts(frame);
   InjectAdblockObservers(frame);
   DevToolsClient::Get().Attach(browser);
 }

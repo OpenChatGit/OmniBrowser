@@ -15,6 +15,7 @@
 #endif
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
@@ -77,18 +78,70 @@ void SendHttpResponse(SOCKET client,
                       int status_code,
                       const std::string& status_text,
                       const std::string& content_type,
-                      const std::string& body) {
+                      const std::string& body,
+                      const std::string& cors_origin = {}) {
   std::ostringstream oss;
   oss << "HTTP/1.1 " << status_code << " " << status_text << "\r\n";
   oss << "Content-Type: " << content_type << "\r\n";
   oss << "Content-Length: " << body.size() << "\r\n";
-  oss << "Access-Control-Allow-Origin: *\r\n";
-  oss << "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n";
-  oss << "Access-Control-Allow-Headers: *\r\n";
+  if (!cors_origin.empty()) {
+    oss << "Access-Control-Allow-Origin: " << cors_origin << "\r\n";
+    oss << "Vary: Origin\r\n";
+    oss << "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n";
+    oss << "Access-Control-Allow-Headers: Content-Type, Accept, X-Omni-Agent\r\n";
+  }
   oss << "Connection: close\r\n\r\n";
   oss << body;
 
   SendAll(client, oss.str());
+}
+
+std::string LowerAscii(std::string value) {
+  for (char& c : value) {
+    if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+  }
+  return value;
+}
+
+bool IsLoopbackAuthority(const std::string& authority) {
+  const std::string lower = LowerAscii(authority);
+  size_t host_end = std::string::npos;
+  size_t port_start = std::string::npos;
+  if (!lower.empty() && lower.front() == '[') {
+    const size_t close = lower.find(']');
+    if (close == std::string::npos) return false;
+    host_end = close + 1;
+    if (host_end < lower.size()) {
+      if (lower[host_end] != ':') return false;
+      port_start = host_end + 1;
+    }
+  } else {
+    const size_t colon = lower.find(':');
+    if (colon != std::string::npos) {
+      if (lower.find(':', colon + 1) != std::string::npos) return false;
+      host_end = colon;
+      port_start = colon + 1;
+    }
+  }
+  const std::string host = host_end == std::string::npos ? lower : lower.substr(0, host_end);
+  if (host != "localhost" && host != "127.0.0.1" && host != "[::1]") {
+    return false;
+  }
+  if (port_start == std::string::npos) return true;
+  const std::string port = lower.substr(port_start);
+  return !port.empty() &&
+         std::all_of(port.begin(), port.end(), [](unsigned char c) { return std::isdigit(c); });
+}
+
+bool IsAllowedOrigin(const std::string& origin) {
+  if (origin.empty() || origin == "null") return origin.empty();
+  const size_t scheme_end = origin.find("://");
+  if (scheme_end == std::string::npos || LowerAscii(origin.substr(0, scheme_end)) != "http") {
+    return false;
+  }
+  const std::string authority = origin.substr(scheme_end + 3);
+  if (authority.find_first_of("/?#@") != std::string::npos) return false;
+  return IsLoopbackAuthority(authority);
 }
 
 std::string EndpointFilePath() {
@@ -329,20 +382,6 @@ void HandleClient(SOCKET client) {
     return;
   }
 
-  // CORS Preflight
-  if (method == "OPTIONS") {
-    std::string headers =
-        "HTTP/1.1 204 No Content\r\n"
-        "Access-Control-Allow-Origin: *\r\n"
-        "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
-        "Access-Control-Allow-Headers: *\r\n"
-        "Access-Control-Max-Age: 86400\r\n"
-        "Connection: close\r\n\r\n";
-    SendAll(client, headers);
-    closesocket(client);
-    return;
-  }
-
   std::string path = full_path;
   std::string query;
   size_t q_pos = full_path.find('?');
@@ -359,6 +398,8 @@ void HandleClient(SOCKET client) {
 
   std::string line;
   std::string agent_header;
+  std::string origin_header;
+  std::string host_header;
   while (std::getline(stream, line) && line != "\r" && !line.empty()) {
     if (line.back() == '\r') line.pop_back();
     if (line.rfind("Content-Length:", 0) == 0 || line.rfind("content-length:", 0) == 0) {
@@ -390,12 +431,40 @@ void HandleClient(SOCKET client) {
           agent_header.erase(agent_header.begin());
         }
       }
+    } else if (lower.rfind("origin:", 0) == 0 || lower.rfind("host:", 0) == 0) {
+      const size_t colon = line.find(':');
+      std::string value = colon == std::string::npos ? std::string() : line.substr(colon + 1);
+      while (!value.empty() && (value.front() == ' ' || value.front() == '\t')) value.erase(value.begin());
+      while (!value.empty() && (value.back() == '\r' || value.back() == ' ' || value.back() == '\t')) value.pop_back();
+      if (lower.rfind("origin:", 0) == 0) origin_header = std::move(value);
+      else host_header = std::move(value);
     }
+  }
+
+  const bool origin_allowed = IsAllowedOrigin(origin_header);
+  if ((!host_header.empty() && !IsLoopbackAuthority(host_header)) || !origin_allowed) {
+    SendHttpResponse(client, 403, "Forbidden", "text/plain", "Local MCP access only");
+    closesocket(client);
+    return;
+  }
+
+  if (method == "OPTIONS") {
+    std::string headers = "HTTP/1.1 204 No Content\r\n";
+    if (!origin_header.empty()) {
+      headers += "Access-Control-Allow-Origin: " + origin_header + "\r\n";
+      headers += "Vary: Origin\r\n";
+      headers += "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n";
+      headers += "Access-Control-Allow-Headers: Content-Type, Accept, X-Omni-Agent\r\n";
+    }
+    headers += "Access-Control-Max-Age: 86400\r\nConnection: close\r\n\r\n";
+    SendAll(client, headers);
+    closesocket(client);
+    return;
   }
 
   if (bad_length) {
     SendHttpResponse(client, 400, "Bad Request", "text/plain",
-                     "Invalid or too large Content-Length");
+                     "Invalid or too large Content-Length", origin_header);
     closesocket(client);
     return;
   }
@@ -428,8 +497,12 @@ void HandleClient(SOCKET client) {
     sse_hdr << "Content-Type: text/event-stream\r\n";
     sse_hdr << "Cache-Control: no-cache\r\n";
     sse_hdr << "Connection: keep-alive\r\n";
-    sse_hdr << "Access-Control-Allow-Origin: *\r\n";
-    sse_hdr << "Access-Control-Allow-Headers: *\r\n\r\n";
+    if (!origin_header.empty()) {
+      sse_hdr << "Access-Control-Allow-Origin: " << origin_header << "\r\n";
+      sse_hdr << "Access-Control-Allow-Headers: Content-Type, Accept, X-Omni-Agent\r\n";
+      sse_hdr << "Vary: Origin\r\n";
+    }
+    sse_hdr << "\r\n";
     SendAll(client, sse_hdr.str());
 
     // Send initial endpoint event as required by MCP SSE Transport spec
@@ -495,42 +568,42 @@ void HandleClient(SOCKET client) {
         std::lock_guard<std::mutex> lock(target_session->send_mu);
         SendAll(target_session->socket, sse_msg);
       }
-      SendHttpResponse(client, 202, "Accepted", "text/plain", "Accepted");
+      SendHttpResponse(client, 202, "Accepted", "text/plain", "Accepted", origin_header);
     } else {
-      SendHttpResponse(client, 200, "OK", "application/json", response_json);
+      SendHttpResponse(client, 200, "OK", "application/json", response_json, origin_header);
     }
 
     closesocket(client);
     return;
   }
 
-  // 3. Direct JSON-RPC POST Endpoint: POST / or POST /mcp or POST /api
-  if (method == "POST") {
+  // 3. Direct JSON-RPC POST Endpoint: POST /, /mcp or /api
+  if (method == "POST" && (path == "/" || path == "/mcp" || path == "/api")) {
     std::string response_json =
         McpServer::Get().ProcessJsonRpc(body, agent_header);
-    SendHttpResponse(client, 200, "OK", "application/json", response_json);
+    SendHttpResponse(client, 200, "OK", "application/json", response_json, origin_header);
     closesocket(client);
     return;
   }
 
   // 4. Status and Discovery GET / or GET /api/status
-  if (method == "GET") {
+  if (method == "GET" && (path == "/" || path == "/status" || path == "/api/status")) {
     Json status = {
         {"status", "running"},
-        {"service", "OmniBrowser MCP & ACP Server"},
+        {"service", "OmniBrowser MCP Server"},
         {"version", "1.0.0"},
-        {"protocols", {"mcp-2024-11-05", "acp-jsonrpc-2.0"}},
+        {"protocols", {"mcp-2024-11-05"}},
         {"endpoints",
          {{"sse", "/sse"},
           {"message", "/message?sessionId={id}"},
           {"direct_rpc", "/mcp"},
           {"status", "/status"}}}};
-    SendHttpResponse(client, 200, "OK", "application/json", status.dump(2));
+    SendHttpResponse(client, 200, "OK", "application/json", status.dump(2), origin_header);
     closesocket(client);
     return;
   }
 
-  SendHttpResponse(client, 404, "Not Found", "text/plain", "Not Found");
+  SendHttpResponse(client, 404, "Not Found", "text/plain", "Not Found", origin_header);
   closesocket(client);
 }
 

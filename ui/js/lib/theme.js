@@ -51,7 +51,7 @@
   function applyBrandMarks() {
     const src = brandMark();
     document.querySelectorAll(
-      ".browser-brand-mark, .serp-brand-mark, .hist-brand-mark, .info-hero-mark"
+      ".browser-brand-mark, .serp-brand-mark, .hist-brand-mark, .info-hero-mark, .update-flyout-logo"
     ).forEach((img) => {
       if (img && img.getAttribute("src") !== src) {
         img.setAttribute("src", src);

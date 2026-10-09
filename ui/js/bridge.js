@@ -486,5 +486,8 @@
     agentPause() {
       return nativeQuery({ method: "agent.pause", params: {} });
     },
+    agentResume() {
+      return nativeQuery({ method: "agent.resume", params: {} });
+    },
   };
 })();

@@ -1,5 +1,7 @@
 #include "omni/scrollbar_inject.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
 #include <sstream>
 
@@ -38,6 +40,31 @@ std::string JsEscape(const std::string& input) {
     }
   }
   return out;
+}
+
+bool IsYouTubeUrl(const std::string& url) {
+  const auto scheme = url.find("://");
+  if (scheme == std::string::npos) {
+    return false;
+  }
+  const size_t start = scheme + 3;
+  const size_t end = url.find_first_of("/:?#", start);
+  std::string host = url.substr(
+      start, end == std::string::npos ? std::string::npos : end - start);
+  std::transform(host.begin(), host.end(), host.begin(), [](unsigned char c) {
+    return static_cast<char>(std::tolower(c));
+  });
+  const auto is_domain_or_subdomain = [&host](const char* domain) {
+    const std::string suffix = std::string(".") + domain;
+    return host == domain ||
+           (host.size() > suffix.size() &&
+            host.compare(host.size() - suffix.size(), suffix.size(), suffix) ==
+                0);
+  };
+  return is_domain_or_subdomain("youtube.com") ||
+         is_domain_or_subdomain("youtube-nocookie.com") ||
+         is_domain_or_subdomain("youtubekids.com") ||
+         is_domain_or_subdomain("youtu.be");
 }
 
 // Never append <style> to `document`, and never synthesize <html>.
@@ -79,6 +106,10 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
   }
   const std::string url = frame->GetURL().ToString();
   if (url.rfind("http://", 0) != 0 && url.rfind("https://", 0) != 0) {
+    return;
+  }
+  // YouTube churns its DOM heavily; keep browser-injected JS off this page.
+  if (IsYouTubeUrl(url)) {
     return;
   }
   // Wikipedia-class pages mutate constantly; scrollbar CSS + a 2.5s
@@ -903,6 +934,16 @@ void InjectAdblockCosmetics(CefRefPtr<CefFrame> frame) {
   if (!IsHttpContentUrl(url)) {
     return;
   }
+  // Keep the general filter-list scriptlet bundle off YouTube: its Trusted
+  // Types policy and highly active player DOM have destabilized CEF. A small,
+  // dedicated player response hook is safe to use for this site.
+  if (IsYouTubeUrl(url)) {
+    auto& adblock = AdblockService::Get();
+    if (adblock.enabled() && !adblock.IsAllowlisted(url)) {
+      InjectYoutubePlayerAdStrip(frame);
+    }
+    return;
+  }
   if (IsFragileDomUrl(url)) {
     return;
   }
@@ -913,12 +954,6 @@ void InjectAdblockCosmetics(CefRefPtr<CefFrame> frame) {
   // brave-core GetScriptletGlobalsScript injection order (OnLoadStart).
   InjectAdblockScriptletsBrave(frame, cosmetics.injected_script);
   InjectAdblockCosmeticCss(frame, cosmetics.hide_css);
-  if (url.find("youtube.com") != std::string::npos ||
-      url.find("youtube-nocookie.com") != std::string::npos ||
-      url.find("youtubekids.com") != std::string::npos ||
-      url.find("youtu.be") != std::string::npos) {
-    InjectYoutubePlayerAdStrip(frame);
-  }
 }
 
 void InjectAdblockObservers(CefRefPtr<CefFrame> frame) {
@@ -927,6 +962,9 @@ void InjectAdblockObservers(CefRefPtr<CefFrame> frame) {
   }
   const std::string url = frame->GetURL().ToString();
   if (!IsHttpContentUrl(url) || IsFragileDomUrl(url)) {
+    return;
+  }
+  if (IsYouTubeUrl(url)) {
     return;
   }
   const AdblockCosmeticDecision cosmetics =

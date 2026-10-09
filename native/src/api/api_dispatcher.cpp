@@ -44,19 +44,6 @@ bool ApiDispatcher::Dispatch(std::string_view method,
   return false;
 }
 
-bool ApiDispatcher::IsRemoteSafe(std::string_view method) const {
-  const auto exact = exact_.find(std::string(method));
-  if (exact != exact_.end()) {
-    return exact->second.exposure == ApiExposure::RemoteSafe;
-  }
-  for (const auto& entry : prefixes_) {
-    if (method.rfind(entry.first, 0) == 0) {
-      return entry.second.exposure == ApiExposure::RemoteSafe;
-    }
-  }
-  return false;
-}
-
 nlohmann::json ApiDispatcher::ListCatalog() const {
   Json catalog = Json::array();
   for (const auto& entry : exact_) {

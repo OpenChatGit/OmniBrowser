@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-09
+
+### Fixed
+- Prevented YouTube ad response filtering from running on allowlisted sites and expanded it to current player, playlist, and Shorts endpoints.
+- Kept the risky generic filter-list scriptlets disabled on YouTube while using the dedicated player ad hook.
+- Rendered the update panel in the native overlay so it stays above the webpage view.
+- Fixed several browser, agent-control, and browsing-data actions, and removed unused assets.
+
 ## [0.1.0] - 2026-09-04
 
 ### Added
