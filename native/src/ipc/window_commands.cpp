@@ -133,12 +133,15 @@ bool StartUpdateInstaller(const std::string& download_url,
 param([string]$DownloadUrl, [string]$ChecksumUrl, [string]$InstallDir, [string]$Executable, [int]$ProcessId, [string]$Self)
 $ErrorActionPreference = 'Stop'
 $work = Join-Path $env:TEMP ('OmniBrowserUpdate-' + [guid]::NewGuid().ToString('N'))
+$log = Join-Path $env:TEMP 'OmniBrowser-update.log'
+Set-Content -LiteralPath $log -Value ('Update started for ' + $Executable + ' from PID ' + $ProcessId)
 try {
   New-Item -ItemType Directory -Path $work -Force | Out-Null
   $zip = Join-Path $work 'update.zip'
   $checksumFile = Join-Path $work 'update.zip.sha256'
   & curl.exe --fail --location --silent --show-error --retry 3 --retry-delay 2 --output $zip $DownloadUrl
   if ($LASTEXITCODE -ne 0) { throw 'Could not download the update package.' }
+  Add-Content -LiteralPath $log -Value ('Downloaded package (' + (Get-Item $zip).Length + ' bytes).')
   & curl.exe --fail --location --silent --show-error --retry 3 --retry-delay 2 --output $checksumFile $ChecksumUrl
   if ($LASTEXITCODE -ne 0) { throw 'Could not download the update checksum.' }
   $checksumText = Get-Content -LiteralPath $checksumFile -Raw
@@ -146,13 +149,24 @@ try {
   if ($expected -notmatch '^[0-9a-f]{64}$') { throw 'The release checksum is missing or invalid.' }
   $actual = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($actual -ne $expected) { throw 'The downloaded update failed its SHA-256 check.' }
+  Add-Content -LiteralPath $log -Value 'Checksum verified.'
   $unpacked = Join-Path $work 'unpacked'
   Expand-Archive -Path $zip -DestinationPath $unpacked -Force
   if (-not (Test-Path (Join-Path $unpacked 'OmniBrowser.exe'))) { throw 'The release archive does not contain OmniBrowser.exe.' }
-  while (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 500 }
+  Add-Content -LiteralPath $log -Value 'Archive extracted.'
+  $deadline = [DateTime]::UtcNow.AddMinutes(2)
+  do {
+    $runningAppProcesses = @(Get-Process -Name 'OmniBrowser' -ErrorAction SilentlyContinue | Where-Object { $_.Path -and $_.Path -ieq $Executable })
+    if ($runningAppProcesses.Count -eq 0) { break }
+    if ([DateTime]::UtcNow -ge $deadline) { throw 'OmniBrowser is still running; close all browser windows and try the update again.' }
+    Start-Sleep -Milliseconds 500
+  } while ($true)
+  Add-Content -LiteralPath $log -Value 'Browser processes stopped; installing files.'
   Copy-Item -Path (Join-Path $unpacked '*') -Destination $InstallDir -Recurse -Force
+  Add-Content -LiteralPath $log -Value 'Files installed; restarting OmniBrowser.'
   Start-Process -FilePath $Executable -WorkingDirectory $InstallDir
 } catch {
+  Add-Content -LiteralPath $log -Value ('Update failed: ' + $_.Exception.ToString())
   Add-Type -AssemblyName PresentationFramework
   [System.Windows.MessageBox]::Show(('OmniBrowser could not install the update: ' + $_.Exception.Message), 'OmniBrowser Update', 'OK', 'Error') | Out-Null
   if (Test-Path $Executable) { Start-Process -FilePath $Executable -WorkingDirectory $InstallDir }

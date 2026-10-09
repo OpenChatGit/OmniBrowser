@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-09
+
+### Fixed
+- Wait for all OmniBrowser processes using the install directory to exit before replacing release files, and log update progress and failures.
+
 ## [0.1.3] - 2026-10-09
 
 ### Fixed
