@@ -449,7 +449,7 @@
       try {
         await window.OmniBridge.call("app.installUpdate", {
           downloadUrl: data.downloadUrl,
-          checksumUrl: `${data.downloadUrl}.sha256`,
+          sha256: data.sha256,
         });
         link.querySelector("span").textContent = "Installing and restarting…";
       } catch (error) {

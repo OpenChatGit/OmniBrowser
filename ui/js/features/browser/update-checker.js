@@ -106,6 +106,7 @@
         downloadUrl: activeReleaseData.assets?.find((asset) =>
           /^OmniBrowser-v[0-9]+\.[0-9]+\.[0-9]+-windows-x64\.zip$/i.test(asset.name || "")
         )?.browser_download_url || "",
+        sha256: activeReleaseData.downloadSha256 || "",
       },
     }).catch(() => {});
     flyoutOpen = true;
@@ -151,12 +152,14 @@
               /^OmniBrowser-v[0-9]+\.[0-9]+\.[0-9]+-windows-x64\.zip$/i.test(asset.name || "")
             )
           : null;
-        if (!packageAsset?.browser_download_url) {
+        const sha256 = String(packageAsset?.digest || "").match(/^sha256:([a-f0-9]{64})$/i)?.[1] || "";
+        if (!packageAsset?.browser_download_url || !sha256) {
           hideUpdate();
           return null;
         }
         if (release && release.tag_name && isNewer(release.tag_name, current)) {
           release.downloadUrl = packageAsset.browser_download_url;
+          release.downloadSha256 = sha256;
           showUpdate(release);
           return release;
         }

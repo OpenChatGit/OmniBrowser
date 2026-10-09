@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-10-09
+
+### Fixed
+- Read the package SHA-256 digest from GitHub's release metadata so update installation does not depend on downloading a separate checksum file.
+
 ## [0.1.4] - 2026-10-09
 
 ### Fixed

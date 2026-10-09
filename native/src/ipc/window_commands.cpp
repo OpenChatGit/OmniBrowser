@@ -103,14 +103,15 @@ std::wstring QuoteWindowsArgument(const std::wstring& value) {
 }
 
 bool StartUpdateInstaller(const std::string& download_url,
-                          const std::string& checksum_url,
+                          const std::string& sha256,
                           std::string* error) {
   constexpr char kReleaseAssetPrefix[] =
       "https://github.com/OpenChatGit/OmniBrowser/releases/download/";
   if (download_url.rfind(kReleaseAssetPrefix, 0) != 0 ||
       download_url.find_first_of("\r\n\"") != std::string::npos ||
-      checksum_url != download_url + ".sha256") {
-    *error = "The update package URL is invalid.";
+      sha256.size() != 64 ||
+      sha256.find_first_not_of("0123456789abcdefABCDEF") != std::string::npos) {
+    *error = "The update package URL or SHA-256 digest is invalid.";
     return false;
   }
 
@@ -130,7 +131,7 @@ bool StartUpdateInstaller(const std::string& download_url,
   DeleteFileW(temp_file);
 
   static constexpr wchar_t kInstallerScript[] = LR"PS(
-param([string]$DownloadUrl, [string]$ChecksumUrl, [string]$InstallDir, [string]$Executable, [int]$ProcessId, [string]$Self)
+param([string]$DownloadUrl, [string]$ExpectedSha256, [string]$InstallDir, [string]$Executable, [int]$ProcessId, [string]$Self)
 $ErrorActionPreference = 'Stop'
 $work = Join-Path $env:TEMP ('OmniBrowserUpdate-' + [guid]::NewGuid().ToString('N'))
 $log = Join-Path $env:TEMP 'OmniBrowser-update.log'
@@ -138,14 +139,10 @@ Set-Content -LiteralPath $log -Value ('Update started for ' + $Executable + ' fr
 try {
   New-Item -ItemType Directory -Path $work -Force | Out-Null
   $zip = Join-Path $work 'update.zip'
-  $checksumFile = Join-Path $work 'update.zip.sha256'
   & curl.exe --fail --location --silent --show-error --retry 3 --retry-delay 2 --output $zip $DownloadUrl
   if ($LASTEXITCODE -ne 0) { throw 'Could not download the update package.' }
   Add-Content -LiteralPath $log -Value ('Downloaded package (' + (Get-Item $zip).Length + ' bytes).')
-  & curl.exe --fail --location --silent --show-error --retry 3 --retry-delay 2 --output $checksumFile $ChecksumUrl
-  if ($LASTEXITCODE -ne 0) { throw 'Could not download the update checksum.' }
-  $checksumText = Get-Content -LiteralPath $checksumFile -Raw
-  $expected = (($checksumText -split '\s+')[0]).Trim().ToLowerInvariant()
+  $expected = $ExpectedSha256.Trim().ToLowerInvariant()
   if ($expected -notmatch '^[0-9a-f]{64}$') { throw 'The release checksum is missing or invalid.' }
   $actual = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLowerInvariant()
   if ($actual -ne $expected) { throw 'The downloaded update failed its SHA-256 check.' }
@@ -195,8 +192,8 @@ try {
 
   const std::wstring powershell = L"powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File " +
       QuoteWindowsArgument(script_path.wstring()) + L" -DownloadUrl " +
-      QuoteWindowsArgument(utf8::Widen(download_url)) + L" -ChecksumUrl " +
-      QuoteWindowsArgument(utf8::Widen(checksum_url)) + L" -InstallDir " +
+      QuoteWindowsArgument(utf8::Widen(download_url)) + L" -ExpectedSha256 " +
+      QuoteWindowsArgument(utf8::Widen(sha256)) + L" -InstallDir " +
       QuoteWindowsArgument(utf8::Widen(paths::ExecutableDir())) + L" -Executable " +
       QuoteWindowsArgument(std::filesystem::path(utf8::Widen(paths::ExecutableDir())).append(L"OmniBrowser.exe").wstring()) +
       L" -ProcessId " + std::to_wstring(GetCurrentProcessId()) + L" -Self " +
@@ -339,7 +336,7 @@ bool HandleWindowCommand(
     std::string error;
     const bool started = StartUpdateInstaller(
         params.value("downloadUrl", std::string()),
-        params.value("checksumUrl", std::string()), &error);
+        params.value("sha256", std::string()), &error);
     if (!started) {
       callback->Failure(400, error);
       return true;
