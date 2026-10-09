@@ -136,8 +136,12 @@ $work = Join-Path $env:TEMP ('OmniBrowserUpdate-' + [guid]::NewGuid().ToString('
 try {
   New-Item -ItemType Directory -Path $work -Force | Out-Null
   $zip = Join-Path $work 'update.zip'
-  Invoke-WebRequest -Uri $DownloadUrl -OutFile $zip -UseBasicParsing
-  $checksumText = (Invoke-WebRequest -Uri $ChecksumUrl -UseBasicParsing).Content
+  $checksumFile = Join-Path $work 'update.zip.sha256'
+  & curl.exe --fail --location --silent --show-error --retry 3 --retry-delay 2 --output $zip $DownloadUrl
+  if ($LASTEXITCODE -ne 0) { throw 'Could not download the update package.' }
+  & curl.exe --fail --location --silent --show-error --retry 3 --retry-delay 2 --output $checksumFile $ChecksumUrl
+  if ($LASTEXITCODE -ne 0) { throw 'Could not download the update checksum.' }
+  $checksumText = Get-Content -LiteralPath $checksumFile -Raw
   $expected = (($checksumText -split '\s+')[0]).Trim().ToLowerInvariant()
   if ($expected -notmatch '^[0-9a-f]{64}$') { throw 'The release checksum is missing or invalid.' }
   $actual = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLowerInvariant()
