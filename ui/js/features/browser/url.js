@@ -3,13 +3,6 @@
 
   const ENGINES = [
     {
-      id: "qubrain",
-      name: "QuBrain Search",
-      queryUrl: null,
-      local: true,
-      icon: "assets/qubrain.svg",
-    },
-    {
       id: "brave",
       name: "Brave",
       queryUrl: "https://search.brave.com/search?q=",
@@ -53,7 +46,7 @@
     },
   ];
 
-  const DEFAULT_ENGINE_ID = "qubrain";
+  const DEFAULT_ENGINE_ID = "google";
 
   function readStoredId() {
     try {
@@ -63,7 +56,8 @@
     }
   }
 
-  let activeId = readStoredId();
+  const storedEngineId = readStoredId();
+  let activeId = storedEngineId;
   if (!ENGINES.some((engine) => engine.id === activeId)) {
     activeId = DEFAULT_ENGINE_ID;
   }
@@ -97,6 +91,10 @@
     return engine;
   }
 
+  if (storedEngineId !== activeId) {
+    setSearchEngine(activeId);
+  }
+
   function pullSearchEngineFromSettings() {
     if (
       !window.OmniBridge ||
@@ -109,6 +107,8 @@
         const value = result && result.value;
         if (typeof value === "string" && ENGINES.some((e) => e.id === value)) {
           activeId = value;
+        } else if (value === "qubrain") {
+          setSearchEngine(DEFAULT_ENGINE_ID);
         }
       })
       .catch(() => {});
@@ -142,19 +142,18 @@
     return false;
   }
 
-  function localSearchUrl(query) {
-    const url = new URL("search.html", window.location.href);
-    url.searchParams.set("q", query);
-    return url.href;
-  }
-
-  function isLocalSearchUrl(url) {
+  function migrateLegacySearchUrl(url) {
     try {
       const parsed = new URL(url);
+      const shell = new URL(window.location.href);
       const path = parsed.pathname.replace(/\\/g, "/").toLowerCase();
-      return path.endsWith("/search.html") || path.endsWith("search.html");
+      const isLocalShellPage =
+        parsed.protocol === shell.protocol && parsed.origin === shell.origin;
+      if (!isLocalShellPage || !path.endsWith("/search.html")) return url;
+      const query = String(parsed.searchParams.get("q") || "").trim();
+      return query ? toNavigationUrl(query) : "about:blank";
     } catch (_) {
-      return false;
+      return url;
     }
   }
 
@@ -230,9 +229,6 @@
       return `https://${value}`;
     }
     const engine = getSearchEngine();
-    if (engine.local) {
-      return localSearchUrl(value);
-    }
     return `${engine.queryUrl}${encodeURIComponent(value)}`;
   }
 
@@ -252,14 +248,6 @@
     if (isLocalInfoUrl(url)) {
       return "Info";
     }
-    if (isLocalSearchUrl(url)) {
-      try {
-        const q = String(new URL(url).searchParams.get("q") || "").trim();
-        return q || "Search";
-      } catch (_) {
-        return "Search";
-      }
-    }
     return url;
   }
 
@@ -269,10 +257,6 @@
     }
     try {
       const parsed = new URL(url);
-      if (isLocalSearchUrl(url)) {
-        const q = String(parsed.searchParams.get("q") || "").trim();
-        return q || "Search";
-      }
       if (isLocalHistoryUrl(url)) {
         return "History";
       }
@@ -298,9 +282,6 @@
     }
     try {
       const parsed = new URL(url);
-      if (isLocalSearchUrl(url)) {
-        return "QuBrain Search";
-      }
       if (isLocalHistoryUrl(url)) {
         return "History";
       }
@@ -382,8 +363,7 @@
     setSearchEngine,
     looksLikeUrl,
     toNavigationUrl,
-    localSearchUrl,
-    isLocalSearchUrl,
+    migrateLegacySearchUrl,
     localHistoryUrl,
     isLocalHistoryUrl,
     localDownloadsUrl,

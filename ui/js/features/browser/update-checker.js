@@ -20,7 +20,7 @@
     return parts;
   }
 
-  // Compare numeric SemVer components; prerelease suffixes do not affect this updater.
+  // Compare the release's numeric SemVer components with the installed version.
   function isNewer(latestStr, currentStr) {
     const latest = parseSemVer(latestStr);
     const current = parseSemVer(currentStr);
@@ -30,10 +30,6 @@
       if (latest[i] < current[i]) return false;
     }
     return false;
-  }
-
-  function isNewer(latestStr, currentStr) {
-    return isNewerOrEqual(latestStr, currentStr);
   }
 
   async function getCurrentVersion() {
@@ -107,6 +103,9 @@
         version: activeReleaseData.tag_name || "New Version",
         notes: formatReleaseNotes(activeReleaseData.body),
         releaseUrl: activeReleaseData.html_url || `https://github.com/${REPO}/releases`,
+        downloadUrl: activeReleaseData.assets?.find((asset) =>
+          /^OmniBrowser-v[0-9]+\.[0-9]+\.[0-9]+-windows-x64\.zip$/i.test(asset.name || "")
+        )?.browser_download_url || "",
       },
     }).catch(() => {});
     flyoutOpen = true;
@@ -147,7 +146,17 @@
 
       if (response.ok) {
         const release = await response.json();
+        const packageAsset = Array.isArray(release?.assets)
+          ? release.assets.find((asset) =>
+              /^OmniBrowser-v[0-9]+\.[0-9]+\.[0-9]+-windows-x64\.zip$/i.test(asset.name || "")
+            )
+          : null;
+        if (!packageAsset?.browser_download_url) {
+          hideUpdate();
+          return null;
+        }
         if (release && release.tag_name && isNewer(release.tag_name, current)) {
+          release.downloadUrl = packageAsset.browser_download_url;
           showUpdate(release);
           return release;
         }

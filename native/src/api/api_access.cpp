@@ -84,6 +84,7 @@ bool IsTrustedUiAllowedMethod(std::string_view method) {
          method.rfind("plugins.", 0) == 0 ||
          method.rfind("agent.", 0) == 0 ||
          method.rfind("page.", 0) == 0 ||
+         method == "app.installUpdate" ||
          method == "api.list" ||
          method == "browser.navigate" || method == "app.info";
 }

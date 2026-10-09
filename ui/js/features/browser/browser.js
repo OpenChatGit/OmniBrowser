@@ -6,7 +6,7 @@
     domainFromUrl,
     normalizeTabTitle,
     isBlankUrl,
-    isLocalSearchUrl,
+    migrateLegacySearchUrl,
     isLocalHistoryUrl,
     isLocalDownloadsUrl,
     isLocalBookmarksUrl,
@@ -356,18 +356,18 @@
           return [];
         }
         return data
-          .filter(
-            (entry) =>
-              entry &&
-              typeof entry.url === "string" &&
-              entry.url &&
-              !isBlankUrl(entry.url)
-          )
-          .map((entry) => ({
-            url: entry.url,
-            title: String(entry.title || titleFromUrl(entry.url)),
-            ts: Number(entry.ts) || 0,
-          }))
+          .filter((entry) => entry && typeof entry.url === "string" && entry.url)
+          .map((entry) => {
+            const url = migrateLegacySearchUrl(entry.url);
+            return {
+              url,
+              title: url === entry.url
+                ? String(entry.title || titleFromUrl(url))
+                : titleFromUrl(url),
+              ts: Number(entry.ts) || 0,
+            };
+          })
+          .filter((entry) => !isBlankUrl(entry.url))
           .slice(0, MAX_VISIT_HISTORY);
       } catch (_) {
         return [];
@@ -501,18 +501,18 @@
             return;
           }
           visitHistory = result.entries
-            .filter(
-              (entry) =>
-                entry &&
-                typeof entry.url === "string" &&
-                entry.url &&
-                !isBlankUrl(entry.url)
-            )
-            .map((entry) => ({
-              url: entry.url,
-              title: String(entry.title || titleFromUrl(entry.url)),
-              ts: Number(entry.ts) || 0,
-            }))
+            .filter((entry) => entry && typeof entry.url === "string" && entry.url)
+            .map((entry) => {
+              const url = migrateLegacySearchUrl(entry.url);
+              return {
+                url,
+                title: url === entry.url
+                  ? String(entry.title || titleFromUrl(url))
+                  : titleFromUrl(url),
+                ts: Number(entry.ts) || 0,
+              };
+            })
+            .filter((entry) => !isBlankUrl(entry.url))
             .slice(0, MAX_VISIT_HISTORY);
         })
         .catch(() => {});
@@ -688,7 +688,7 @@
           const history = Array.isArray(tab.history)
             ? tab.history.filter(
                 (entry) => typeof entry === "string" && entry.length > 0
-              )
+              ).map(migrateLegacySearchUrl)
             : [];
           let index = Number.isInteger(tab.index) ? tab.index : -1;
           if (history.length === 0) {
@@ -715,6 +715,10 @@
       if (Array.isArray(data.closedTabs)) {
         closedTabs = data.closedTabs
           .filter((entry) => entry && Array.isArray(entry.history))
+          .map((entry) => ({
+            ...entry,
+            history: entry.history.map(migrateLegacySearchUrl),
+          }))
           .slice(0, MAX_CLOSED_TABS);
         saveClosedTabs();
       }
@@ -1029,7 +1033,6 @@
         return true;
       }
       return (
-        isLocalSearchUrl(url) ||
         isLocalHistoryUrl(url) ||
         isLocalDownloadsUrl(url) ||
         isLocalBookmarksUrl(url) ||
@@ -1184,7 +1187,7 @@
         return true;
       }
       const url = tab && tab.index >= 0 ? tab.history[tab.index] : "";
-      return isLocalSearchUrl(url);
+      return false;
     }
 
     function faviconCandidatesForUrl(url) {

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-09
+
+### Added
+- Added a Windows update installer that downloads the GitHub release ZIP, verifies its SHA-256 checksum, installs it, and restarts OmniBrowser.
+- Added a SHA-256 checksum asset to each automated GitHub release.
+
+### Removed
+- Removed the QuBrain Search SERP, its SearXNG-backed Cloudflare Worker, map-search integration, and SearXNG deployment configuration. Address-bar searches now use the selected external search engine.
+
 ## [0.1.1] - 2026-10-09
 
 ### Fixed

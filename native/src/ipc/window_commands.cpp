@@ -17,7 +17,11 @@
 
 #include "include/views/cef_browser_view.h"
 #include "include/views/cef_window.h"
+#include "include/base/cef_callback.h"
+#include "include/wrapper/cef_closure_task.h"
+#include "include/wrapper/cef_helpers.h"
 #include "omni/dev_mode.h"
+#include "omni/omni_handler.h"
 #include "omni/paths.h"
 #include "omni/utf8.h"
 
@@ -73,6 +77,128 @@ bool WriteJsonFile(const std::string& path_utf8, const Json& value) {
   out << value.dump();
   return static_cast<bool>(out);
 }
+
+#if defined(_WIN32)
+std::wstring QuoteWindowsArgument(const std::wstring& value) {
+  std::wstring quoted = L"\"";
+  size_t backslashes = 0;
+  for (wchar_t ch : value) {
+    if (ch == L'\\') {
+      ++backslashes;
+      continue;
+    }
+    if (ch == L'\"') {
+      quoted.append(backslashes * 2 + 1, L'\\');
+      quoted.push_back(ch);
+      backslashes = 0;
+      continue;
+    }
+    quoted.append(backslashes, L'\\');
+    backslashes = 0;
+    quoted.push_back(ch);
+  }
+  quoted.append(backslashes * 2, L'\\');
+  quoted.push_back(L'\"');
+  return quoted;
+}
+
+bool StartUpdateInstaller(const std::string& download_url,
+                          const std::string& checksum_url,
+                          std::string* error) {
+  constexpr char kReleaseAssetPrefix[] =
+      "https://github.com/OpenChatGit/OmniBrowser/releases/download/";
+  if (download_url.rfind(kReleaseAssetPrefix, 0) != 0 ||
+      download_url.find_first_of("\r\n\"") != std::string::npos ||
+      checksum_url != download_url + ".sha256") {
+    *error = "The update package URL is invalid.";
+    return false;
+  }
+
+  wchar_t temp_dir[MAX_PATH] = {};
+  const DWORD temp_len = GetTempPathW(MAX_PATH, temp_dir);
+  if (!temp_len || temp_len >= MAX_PATH) {
+    *error = "Could not locate the temporary folder.";
+    return false;
+  }
+  wchar_t temp_file[MAX_PATH] = {};
+  if (!GetTempFileNameW(temp_dir, L"omb", 0, temp_file)) {
+    *error = "Could not prepare the update installer.";
+    return false;
+  }
+  std::filesystem::path script_path(temp_file);
+  script_path.replace_extension(L"ps1");
+  DeleteFileW(temp_file);
+
+  static constexpr wchar_t kInstallerScript[] = LR"PS(
+param([string]$DownloadUrl, [string]$ChecksumUrl, [string]$InstallDir, [string]$Executable, [int]$ProcessId, [string]$Self)
+$ErrorActionPreference = 'Stop'
+$work = Join-Path $env:TEMP ('OmniBrowserUpdate-' + [guid]::NewGuid().ToString('N'))
+try {
+  New-Item -ItemType Directory -Path $work -Force | Out-Null
+  $zip = Join-Path $work 'update.zip'
+  Invoke-WebRequest -Uri $DownloadUrl -OutFile $zip -UseBasicParsing
+  $checksumText = (Invoke-WebRequest -Uri $ChecksumUrl -UseBasicParsing).Content
+  $expected = (($checksumText -split '\s+')[0]).Trim().ToLowerInvariant()
+  if ($expected -notmatch '^[0-9a-f]{64}$') { throw 'The release checksum is missing or invalid.' }
+  $actual = (Get-FileHash -Path $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+  if ($actual -ne $expected) { throw 'The downloaded update failed its SHA-256 check.' }
+  $unpacked = Join-Path $work 'unpacked'
+  Expand-Archive -Path $zip -DestinationPath $unpacked -Force
+  if (-not (Test-Path (Join-Path $unpacked 'OmniBrowser.exe'))) { throw 'The release archive does not contain OmniBrowser.exe.' }
+  while (Get-Process -Id $ProcessId -ErrorAction SilentlyContinue) { Start-Sleep -Milliseconds 500 }
+  Copy-Item -Path (Join-Path $unpacked '*') -Destination $InstallDir -Recurse -Force
+  Start-Process -FilePath $Executable -WorkingDirectory $InstallDir
+} catch {
+  Add-Type -AssemblyName PresentationFramework
+  [System.Windows.MessageBox]::Show(('OmniBrowser could not install the update: ' + $_.Exception.Message), 'OmniBrowser Update', 'OK', 'Error') | Out-Null
+  if (Test-Path $Executable) { Start-Process -FilePath $Executable -WorkingDirectory $InstallDir }
+} finally {
+  Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
+  Remove-Item -LiteralPath $Self -Force -ErrorAction SilentlyContinue
+}
+)PS";
+
+  {
+    std::ofstream script(script_path, std::ios::binary | std::ios::trunc);
+    if (!script) {
+      *error = "Could not write the update installer.";
+      return false;
+    }
+    script << "\xEF\xBB\xBF";
+    std::string script_utf8;
+    script_utf8.reserve(sizeof(kInstallerScript) / sizeof(kInstallerScript[0]));
+    for (const wchar_t ch : kInstallerScript) {
+      if (!ch) break;
+      script_utf8.push_back(static_cast<char>(ch));
+    }
+    script.write(script_utf8.data(),
+                 static_cast<std::streamsize>(script_utf8.size()));
+  }
+
+  const std::wstring powershell = L"powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File " +
+      QuoteWindowsArgument(script_path.wstring()) + L" -DownloadUrl " +
+      QuoteWindowsArgument(utf8::Widen(download_url)) + L" -ChecksumUrl " +
+      QuoteWindowsArgument(utf8::Widen(checksum_url)) + L" -InstallDir " +
+      QuoteWindowsArgument(utf8::Widen(paths::ExecutableDir())) + L" -Executable " +
+      QuoteWindowsArgument(std::filesystem::path(utf8::Widen(paths::ExecutableDir())).append(L"OmniBrowser.exe").wstring()) +
+      L" -ProcessId " + std::to_wstring(GetCurrentProcessId()) + L" -Self " +
+      QuoteWindowsArgument(script_path.wstring());
+  std::vector<wchar_t> command(powershell.begin(), powershell.end());
+  command.push_back(L'\0');
+  STARTUPINFOW startup = {};
+  startup.cb = sizeof(startup);
+  PROCESS_INFORMATION process = {};
+  if (!CreateProcessW(nullptr, command.data(), nullptr, nullptr, FALSE,
+                      CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process)) {
+    DeleteFileW(script_path.c_str());
+    *error = "Could not start the update installer.";
+    return false;
+  }
+  CloseHandle(process.hThread);
+  CloseHandle(process.hProcess);
+  return true;
+}
+#endif
 
 void DeleteFileUtf8(const std::string& path_utf8) {
   std::error_code ec;
@@ -187,6 +313,31 @@ bool HandleWindowCommand(
                            {"version", OMNI_APP_VERSION},
                            {"private", private_mode}}
                           .dump());
+    return true;
+  }
+
+  if (method == "app.installUpdate") {
+#if defined(_WIN32)
+    std::string error;
+    const bool started = StartUpdateInstaller(
+        params.value("downloadUrl", std::string()),
+        params.value("checksumUrl", std::string()), &error);
+    if (!started) {
+      callback->Failure(400, error);
+      return true;
+    }
+    callback->Success(Json{{"ok", true}}.dump());
+    CefPostDelayedTask(
+        TID_UI,
+        base::BindOnce([]() {
+          if (auto* handler = OmniHandler::GetInstance()) {
+            handler->BeginShutdown();
+          }
+        }),
+        500);
+#else
+    callback->Failure(501, "Automatic updates are currently supported on Windows only.");
+#endif
     return true;
   }
 

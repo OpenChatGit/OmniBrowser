@@ -436,12 +436,29 @@
     content.append(el("p", "update-flyout-notes", data.notes || "A new version of OmniBrowser is available."));
     panel.append(content);
     const actions = el("div", "update-flyout-actions");
-    const link = el("a", "update-btn-release");
-    link.href = data.releaseUrl || "https://github.com/OpenChatGit/OmniBrowser/releases";
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.innerHTML = '<i data-lucide="download" class="icon"></i><span>Download Release</span>';
-    link.addEventListener("click", () => setTimeout(() => window.OmniBridge?.overlayHide?.().catch(() => {}), 200));
+    const link = el("button", "update-btn-release");
+    link.type = "button";
+    link.innerHTML = '<i data-lucide="download" class="icon"></i><span>Download Update</span>';
+    link.addEventListener("click", async () => {
+      if (!data.downloadUrl || !window.OmniBridge?.call) {
+        window.open(data.releaseUrl || "https://github.com/OpenChatGit/OmniBrowser/releases", "_blank", "noopener");
+        return;
+      }
+      link.disabled = true;
+      link.querySelector("span").textContent = "Preparing update…";
+      try {
+        await window.OmniBridge.call("app.installUpdate", {
+          downloadUrl: data.downloadUrl,
+          checksumUrl: `${data.downloadUrl}.sha256`,
+        });
+        link.querySelector("span").textContent = "Installing and restarting…";
+      } catch (error) {
+        link.disabled = false;
+        link.querySelector("span").textContent = "Retry update";
+        const message = el("p", "update-flyout-notes", error?.message || "Could not start the update.");
+        content.append(message);
+      }
+    });
     const later = el("button", "update-btn-dismiss", "Later");
     later.type = "button";
     later.addEventListener("click", () => window.OmniBridge?.overlayHide?.().catch(() => {}));

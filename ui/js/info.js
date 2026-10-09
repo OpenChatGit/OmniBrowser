@@ -7,18 +7,6 @@
   let updatesLoaded = false;
   let updatesLoading = false;
 
-  function apiBase() {
-    try {
-      const override = localStorage.getItem("qubrain.searchApi");
-      if (override && /^https?:\/\//i.test(override)) {
-        return override.replace(/\/+$/, "");
-      }
-    } catch (_) {
-      // ignore
-    }
-    return "https://api.qubrain.org";
-  }
-
   function escapeHtml(value) {
     return String(value || "")
       .replace(/&/g, "&amp;")
@@ -224,18 +212,11 @@
     updatesLoading = true;
     setStatus("Loading updates…", true);
     try {
-      const response = await fetch(`${apiBase()}/v1/updates`, {
-        headers: { Accept: "application/json" },
-      });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const data = await response.json();
-      const list = Array.isArray(data.updates) ? data.updates : [];
+      const list = Array.isArray(window.OmniUpdates) ? window.OmniUpdates : [];
       updatesLoaded = true;
       renderUpdates(list);
     } catch (_) {
-      setStatus("Could not load updates from Cloudflare.", true);
+      setStatus("Could not load update notes.", true);
       if (updatesEl) {
         updatesEl.replaceChildren();
       }

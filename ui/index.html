@@ -195,7 +195,6 @@
                   (function () {
                     var KEY = "omni.searchEngine";
                     var ids = [
-                      "qubrain",
                       "brave",
                       "duckduckgo",
                       "qwant",
@@ -209,14 +208,13 @@
                       var stored = localStorage.getItem(KEY);
                       if (stored && ids.indexOf(stored) !== -1) {
                         id = stored;
+                      } else if (stored === "qubrain") {
+                        localStorage.setItem(KEY, id);
                       }
                     } catch (e) {}
                     var img = document.getElementById("browser-engine-icon");
                     if (img) {
-                      img.src =
-                        id === "qubrain"
-                          ? "assets/qubrain.svg"
-                          : "assets/QuBrain-icons/" + id + "-color.svg";
+                      img.src = "assets/QuBrain-icons/" + id + "-color.svg";
                     }
                   })();
                 </script>

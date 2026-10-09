@@ -2,7 +2,7 @@
 
 Desktop browser: **C++** host + **CEF** (Chromium). No Electron, no Tauri. **Windows** and **Linux** (including WSL2 + WSLg).
 
-Default search is **QuBrain Search**. Chrome, tabs, start page, private windows, and library pages (History, Bookmarks, Downloads) live in this repo.
+Searches from the start page and address bar use the selected external search engine (Google by default). Tabs, privacy controls, and library pages (History, Bookmarks, Downloads) live in this repo.
 
 Native **MCP (Model Context Protocol)** server support allows AI assistants (Claude, Cursor, Antigravity, custom agents) to control tabs, navigate, extract page content, and perform browser interactions. See [MCP Integration Documentation](docs/MCP_INTEGRATION.md).
 
@@ -225,8 +225,7 @@ native/                 # CEF host, paths, downloads, adblock FFI
 native/src/api/         # Central ApiDispatcher + domain handlers
 native/adblock_ffi/     # Rust staticlib wrapping Brave adblock-rust
 resources/adblock/      # Bundled baseline lists + redirect resources
-ui/                     # Start page, SERP, library pages, overlays
-workers/omni-search/    # QuBrain Search API + search.qubrain.org
+ui/                     # Start page, library pages, overlays
 scripts/                # CEF download and helpers
 ```
 
@@ -273,7 +272,7 @@ See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for MPL-2.0 attribution.
 | Host | C++17, CEF (Win32 + Linux/GTK) |
 | UI shell | CEF Views + vanilla HTML/CSS/JS |
 | IPC | `cefQuery` → **ApiDispatcher** registry |
-| Search | Cloudflare Worker (`workers/omni-search`) |
+| Search | User-selected external search engine |
 | Ad blocking | Brave adblock-rust (MPL-2.0) via Rust FFI |
 
 ---

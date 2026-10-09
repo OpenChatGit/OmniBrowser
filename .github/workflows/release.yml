@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version tag (e.g. v0.1.1)'
+        description: 'Version tag (e.g. v0.1.2)'
         required: false
-        default: 'v0.1.1'
+        default: ''
 
 concurrency:
   group: release-${{ github.ref }}
@@ -99,6 +99,9 @@ jobs:
           Compress-Archive -Path "$ReleaseDir/*" -DestinationPath $ZipName -Force
           Write-Host "Archive created: $ZipName"
 
+          $Checksum = (Get-FileHash -Path $ZipName -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -Path "$ZipName.sha256" -Value "$Checksum  $ZipName" -Encoding ascii
+
           # Extract matching version section from CHANGELOG.md
           $CleanVersion = $Version -replace '^v', ''
           $ChangelogFile = "CHANGELOG.md"
@@ -128,6 +131,8 @@ jobs:
           tag_name: ${{ env.RELEASE_TAG }}
           name: OmniBrowser ${{ env.RELEASE_TAG }}
           body_path: ${{ env.RELEASE_NOTES_FILE }}
-          files: ${{ env.RELEASE_ZIP }}
+          files: |
+            ${{ env.RELEASE_ZIP }}
+            ${{ env.RELEASE_ZIP }}.sha256
           draft: false
           prerelease: false

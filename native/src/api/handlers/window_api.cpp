@@ -49,6 +49,20 @@ void RegisterWindowApis() {
         (void)params;
       },
       ApiExposure::UiOnly);
+
+  ApiDispatcher::Get().Register(
+      "app.installUpdate",
+      [](const ApiContext& ctx, const Json& params, ApiResponder& responder) {
+        if (!ctx.cef_callback) {
+          responder.Failure(500, "app.installUpdate requires CEF context");
+          return;
+        }
+        if (!HandleWindowCommand(ctx.browser, ctx.method, params,
+                                 ctx.cef_callback)) {
+          responder.Failure(404, "Update installation is unavailable");
+        }
+      },
+      ApiExposure::UiOnly);
 }
 
 }  // namespace omni

@@ -214,6 +214,8 @@ html[data-theme="light"] .topbar-actions .topbar-btn-update.is-open {
 }
 
 .update-btn-release {
+  border: 0;
+  font-family: inherit;
   flex: 1;
   display: inline-flex;
   align-items: center;

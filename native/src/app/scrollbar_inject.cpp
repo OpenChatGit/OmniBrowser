@@ -94,7 +94,7 @@ bool IsFragileDomUrl(const std::string& url) {
          has("wikiquote.org") || has("wikivoyage.org") ||
          has("wikibooks.org") || has("wikinews.org") ||
          has("wikiversity.org") ||
-         // Bing SERP first paint + cosmetic scriptlets CHECK the browser
+         // Bing search-results first paint + cosmetic scriptlets CHECK the browser
          // process (same class as Wikipedia). Skip page-world inject.
          has("bing.com") || has("bing.net") || has("duckduckgo.com") ||
          has("google.com/search") || has("google.com/webhp");
