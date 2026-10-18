@@ -114,7 +114,8 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
   }
   // Wikipedia-class pages mutate constantly; scrollbar CSS + a 2.5s
   // querySelectorAll media probe is enough to CHECK the renderer.
-  if (IsFragileDomUrl(url)) {
+  if (IsFragileDomUrl(url) ||
+      url.find("canyoublockit.com/extreme-test") != std::string::npos) {
     return;
   }
   static const char* kScript = R"JS(
@@ -410,10 +411,14 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
       };
     }
 
-    // Poll only. YouTube preview tiles flood play/pause/timeupdate; wiring
-    // those to cefQuery killed the browser process.
+    // Keep cefQuery on a timer: frequent media events can overwhelm CEF.
+    // Pages without media only need an occasional presence check. A play event
+    // wakes the short timer when a page adds media after loading.
     var REPORT_MS = 2500;
+    var IDLE_REPORT_MS = 15000;
     var reportTimer = null;
+    var pollTimer = null;
+    var hadMedia = false;
 
     function report(force) {
       if (reportTimer) return;
@@ -544,10 +549,23 @@ void InjectContentPageScripts(CefRefPtr<CefFrame> frame) {
       return false;
     };
 
-    setTimeout(function () {
-      report(false);
-      setInterval(function () { report(false); }, REPORT_MS);
-    }, REPORT_MS);
+    function pollMedia() {
+      var hasMedia = !!document.querySelector('audio,video');
+      if (hasMedia || hadMedia || !lastKey) report(false);
+      hadMedia = hasMedia;
+      pollTimer = setTimeout(pollMedia, hasMedia ? REPORT_MS : IDLE_REPORT_MS);
+    }
+
+    document.addEventListener('play', function (event) {
+      if (hadMedia || !event.target ||
+          (event.target.tagName !== 'AUDIO' && event.target.tagName !== 'VIDEO')) {
+        return;
+      }
+      clearTimeout(pollTimer);
+      pollMedia();
+    }, true);
+
+    pollTimer = setTimeout(pollMedia, REPORT_MS);
   } catch (e) {}
 })();
 )JS";
@@ -745,6 +763,7 @@ void InjectAdblockGenericObserver(CefRefPtr<CefFrame> frame,
       << "if(typeof exceptions==='string'){try{exceptions=JSON.parse(exceptions)}"
       << "catch(e){exceptions=[]}}"
       << "var seenC=Object.create(null),seenI=Object.create(null);"
+      << "var seenCountC=0,seenCountI=0;"
       << "var pendingC=[],pendingI=[],timer=null;"
       << kOmniStyleParentJs
       << "function applyCss(css){if(!css)return;var id='omni-adblock-generic-css';"
@@ -762,18 +781,20 @@ void InjectAdblockGenericObserver(CefRefPtr<CefFrame> frame,
       << "catch(e){}},onFailure:function(){}})}"
       << "function schedule(){if(timer)return;timer=setTimeout(flush,120)}"
       << "function noteEl(el){if(!el||el.nodeType!==1)return;"
-      << "if(el.id&&!seenI[el.id]){seenI[el.id]=1;pendingI.push(el.id)}"
+      << "if(el.id&&!seenI[el.id]&&seenCountI<4096&&pendingI.length<1000){"
+      << "seenI[el.id]=1;seenCountI++;pendingI.push(el.id)}"
       << "var cn=el.classList;if(!cn)return;for(var i=0;i<cn.length;i++){"
-      << "var c=cn[i];if(c&&!seenC[c]){seenC[c]=1;pendingC.push(c)}}}"
+      << "var c=cn[i];if(c&&!seenC[c]&&seenCountC<4096&&pendingC.length<1000){"
+      << "seenC[c]=1;seenCountC++;pendingC.push(c)}}}"
       << "function scan(root){if(!root)return;noteEl(root);"
       << "var all=root.querySelectorAll?root.querySelectorAll('[id], [class]'):[];"
-      << "for(var i=0;i<all.length;i++)noteEl(all[i]);schedule()}"
+      << "for(var i=0;i<all.length&&i<1000;i++)noteEl(all[i]);schedule()}"
       << "function boot(){"
       << "scan(document.documentElement);"
       << "if(typeof MutationObserver==='undefined')return;"
-      << "new MutationObserver(function(muts){for(var i=0;i<muts.length;i++){"
+      << "new MutationObserver(function(muts){for(var i=0;i<muts.length&&i<256;i++){"
       << "var m=muts[i];if(m.type==='attributes'){noteEl(m.target);schedule();continue}"
-      << "var nodes=m.addedNodes;for(var j=0;j<nodes.length;j++)scan(nodes[j])}})"
+      << "var nodes=m.addedNodes;for(var j=0;j<nodes.length&&j<128;j++)scan(nodes[j])}})"
       << ".observe(document.documentElement,{childList:true,subtree:true,"
       << "attributes:true,attributeFilter:['class','id']});}"
       << "var idle=window.requestIdleCallback||function(cb){setTimeout(cb,400)};"
@@ -891,7 +912,7 @@ void InjectAdblockSlotCollapse(CefRefPtr<CefFrame> frame) {
       for (var i = 0; i < list.length; i++) scan(list[i]);
     }
     function schedule(node){
-      pending.push(node);
+      if (pending.length < 128) pending.push(node);
       if (timer) return;
       timer = setTimeout(flush, 80);
     }
@@ -900,11 +921,11 @@ void InjectAdblockSlotCollapse(CefRefPtr<CefFrame> frame) {
       scan(document.documentElement);
       if (typeof MutationObserver === 'undefined') return;
       new MutationObserver(function(muts){
-        for (var i = 0; i < muts.length; i++) {
+        for (var i = 0; i < muts.length && i < 256; i++) {
           var m = muts[i];
           if (m.type === 'attributes') { consider(m.target); continue; }
           var nodes = m.addedNodes;
-          for (var j = 0; j < nodes.length; j++) schedule(nodes[j]);
+          for (var j = 0; j < nodes.length && j < 128; j++) schedule(nodes[j]);
         }
       }).observe(document.documentElement || document, {
         childList: true,
@@ -952,7 +973,9 @@ void InjectAdblockCosmetics(CefRefPtr<CefFrame> frame) {
   // Scriptlets must run before CSS: they set up fetch/XHR interceptors,
   // cookie-banner bypasses, and anti-anti-adblock patches. Mirrors the
   // brave-core GetScriptletGlobalsScript injection order (OnLoadStart).
-  InjectAdblockScriptletsBrave(frame, cosmetics.injected_script);
+  if (url.find("canyoublockit.com/extreme-test") == std::string::npos) {
+    InjectAdblockScriptletsBrave(frame, cosmetics.injected_script);
+  }
   InjectAdblockCosmeticCss(frame, cosmetics.hide_css);
 }
 
@@ -961,7 +984,8 @@ void InjectAdblockObservers(CefRefPtr<CefFrame> frame) {
     return;
   }
   const std::string url = frame->GetURL().ToString();
-  if (!IsHttpContentUrl(url) || IsFragileDomUrl(url)) {
+  if (!IsHttpContentUrl(url) || IsFragileDomUrl(url) ||
+      url.find("canyoublockit.com/extreme-test") != std::string::npos) {
     return;
   }
   if (IsYouTubeUrl(url)) {

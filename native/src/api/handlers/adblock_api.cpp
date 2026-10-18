@@ -2,6 +2,7 @@
 
 #include "omni/adblock_service.h"
 #include "omni/api/api_dispatcher.h"
+#include "omni/omni_handler.h"
 
 namespace omni {
 
@@ -20,7 +21,6 @@ void RegisterAdblockApis() {
   api.Register(
       "browser.adblock.set",
       [](const ApiContext& ctx, const Json& params, ApiResponder& responder) {
-        (void)ctx;
         AdblockService::Get().ApplyPrefs(params);
         // ApplyPrefs() already calls LoadListsIntoEngineLocked() when the
         // "aggressive" flag changes — calling ReloadEngine() afterwards was a
@@ -29,7 +29,11 @@ void RegisterAdblockApis() {
           AdblockService::Get().ReloadEngine();
         }
         const std::string host = params.value("host", "");
-        responder.Success(AdblockService::Get().StatsJson(host).dump());
+        const Json state = AdblockService::Get().StatsJson(host);
+        ctx.owner->EmitBrowserEvent(Json{{"type", "adblock.changed"},
+                                         {"enabled", state.value("enabled", false)},
+                                         {"aggressive", state.value("aggressive", false)}});
+        responder.Success(state.dump());
       },
       ApiExposure::UiOnly);
 

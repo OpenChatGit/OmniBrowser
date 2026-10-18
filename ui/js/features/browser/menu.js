@@ -123,6 +123,16 @@
             OmniBrowser.openTab(infoUrl);
           }
           break;
+        case "open-settings":
+          if (window.OmniBrowser && typeof OmniBrowser.openTab === "function") {
+            const settingsUrl =
+              window.OmniBrowserUrl &&
+              typeof OmniBrowserUrl.localSettingsUrl === "function"
+                ? OmniBrowserUrl.localSettingsUrl()
+                : new URL("settings.html", window.location.href).href;
+            OmniBrowser.openTab(settingsUrl);
+          }
+          break;
         case "new-tab":
           if (window.OmniBrowser && typeof OmniBrowser.openTab === "function") {
             OmniBrowser.openTab();

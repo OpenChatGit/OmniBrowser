@@ -11,6 +11,7 @@
     isLocalDownloadsUrl,
     isLocalBookmarksUrl,
     isLocalInfoUrl,
+    isLocalSettingsUrl,
     localDownloadsUrl,
     formatTabTitle,
     urlsMatch,
@@ -424,7 +425,8 @@
         isLocalHistoryUrl(url) ||
         isLocalDownloadsUrl(url) ||
         isLocalBookmarksUrl(url) ||
-        isLocalInfoUrl(url)
+        isLocalInfoUrl(url) ||
+        isLocalSettingsUrl(url)
       ) {
         return;
       }
@@ -1036,7 +1038,8 @@
         isLocalHistoryUrl(url) ||
         isLocalDownloadsUrl(url) ||
         isLocalBookmarksUrl(url) ||
-        isLocalInfoUrl(url)
+        isLocalInfoUrl(url) ||
+        isLocalSettingsUrl(url)
       );
     }
 
@@ -2431,6 +2434,16 @@
         focusAddressBar();
         return;
       }
+      if (msg.type === "settings.changed" && msg.key === "omni.searchEngine") {
+        setSearchEngine(msg.value, false);
+        return;
+      }
+      if (msg.type === "adblock.changed") {
+        if (window.OmniAdblock && typeof OmniAdblock.applyPrefs === "function") {
+          OmniAdblock.applyPrefs(msg);
+        }
+        return;
+      }
       if (msg.type === "toggle-find") {
         if (window.OmniFind && typeof window.OmniFind.toggle === "function") {
           window.OmniFind.toggle();
@@ -3004,6 +3017,11 @@
     window.addEventListener("omni-theme-change", () => {
       syncSearchBarIcon();
       renderTabs();
+    });
+    window.addEventListener("omni-search-engine-change", () => {
+      syncEngineButton();
+      renderEngineMenu();
+      syncSearchBarIcon();
     });
     migrateVisitHistoryToNative();
     migrateBookmarksToNative();

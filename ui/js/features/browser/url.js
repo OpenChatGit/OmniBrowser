@@ -72,8 +72,9 @@
     return getEngine(activeId);
   }
 
-  function setSearchEngine(id) {
+  function setSearchEngine(id, persistNative = true) {
     const engine = getEngine(id);
+    const changed = activeId !== engine.id;
     activeId = engine.id;
     try {
       localStorage.setItem(STORAGE_KEY, activeId);
@@ -81,12 +82,16 @@
       /* ignore quota / private mode */
     }
     if (
+      persistNative &&
       window.OmniBridge &&
       typeof OmniBridge.settingsSet === "function"
     ) {
-      OmniBridge.settingsSet({ key: STORAGE_KEY, value: activeId }).catch(
+      OmniBridge.settingsSet(STORAGE_KEY, activeId).catch(
         () => {}
       );
+    }
+    if (changed) {
+      window.dispatchEvent(new Event("omni-search-engine-change"));
     }
     return engine;
   }
@@ -106,7 +111,7 @@
       .then((result) => {
         const value = result && result.value;
         if (typeof value === "string" && ENGINES.some((e) => e.id === value)) {
-          activeId = value;
+          setSearchEngine(value, false);
         } else if (value === "qubrain") {
           setSearchEngine(DEFAULT_ENGINE_ID);
         }
@@ -207,6 +212,23 @@
     return new URL("info.html", window.location.href).href;
   }
 
+  function localSettingsUrl() {
+    return new URL("settings.html", window.location.href).href;
+  }
+
+  function isLocalSettingsUrl(url) {
+    try {
+      const parsed = new URL(url);
+      const local = new URL(localSettingsUrl());
+      return parsed.protocol === local.protocol &&
+        parsed.host === local.host &&
+        parsed.pathname.replace(/\\/g, "/").toLowerCase() ===
+          local.pathname.replace(/\\/g, "/").toLowerCase();
+    } catch (_) {
+      return false;
+    }
+  }
+
   function isLocalInfoUrl(url) {
     try {
       const parsed = new URL(url);
@@ -248,6 +270,9 @@
     if (isLocalInfoUrl(url)) {
       return "Info";
     }
+    if (isLocalSettingsUrl(url)) {
+      return "Settings";
+    }
     return url;
   }
 
@@ -268,6 +293,9 @@
       }
       if (isLocalInfoUrl(url)) {
         return "Info";
+      }
+      if (isLocalSettingsUrl(url)) {
+        return "Settings";
       }
       return parsed.hostname.replace(/^www\./, "") || "New Tab";
     } catch (_) {
@@ -293,6 +321,9 @@
       }
       if (isLocalInfoUrl(url)) {
         return "Info";
+      }
+      if (isLocalSettingsUrl(url)) {
+        return "Settings";
       }
       if (parsed.protocol === "file:") {
         return "Local file";
@@ -372,6 +403,8 @@
     isLocalBookmarksUrl,
     localInfoUrl,
     isLocalInfoUrl,
+    localSettingsUrl,
+    isLocalSettingsUrl,
     addressBarLabel,
     titleFromUrl,
     domainFromUrl,

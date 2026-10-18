@@ -37,6 +37,7 @@ enum CommandId : int {
   kToggleAdblockAggressive = 1011,
   kToggleDevTools = 1012,
   kToggleDockDevTools = 1013,
+  kOpenSettings = 1014,
   kAppearanceMenu = 1020,
   kAppearanceSystem = 1021,
   kAppearanceDark = 1022,
@@ -123,6 +124,9 @@ CefRefPtr<CefMenuModel> AppMenuDelegate::Build() {
   menu->AddItem(kOpenDownloads, "Downloads");
   bind(kOpenDownloads, Json{{"action", "open-downloads"}});
   menu->SetAccelerator(kOpenDownloads, 'J', false, true, false);
+
+  menu->AddItem(kOpenSettings, "Settings");
+  bind(kOpenSettings, Json{{"action", "open-settings"}});
 
   menu->AddItem(kClearData, "Delete Browsing Data");
   bind(kClearData, Json{{"action", "clear-data"}});

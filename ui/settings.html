@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Settings</title>
+  <script>
+    (function () {
+      var pref = "system";
+      var cachedTheme = "";
+      try {
+        pref = localStorage.getItem("omni.appearance") || "system";
+        cachedTheme = localStorage.getItem("omni.appearance.theme") || "";
+      } catch (e) {}
+      if (pref !== "light" && pref !== "dark") pref = "system";
+      var dark = !window.matchMedia || window.matchMedia("(prefers-color-scheme: dark)").matches;
+      var theme = pref === "light" ? "light" : pref === "dark" ? "dark"
+        : (cachedTheme === "light" || cachedTheme === "dark") ? cachedTheme
+        : (dark ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+      document.documentElement.style.colorScheme = theme;
+    })();
+  </script>
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/scrollbar.css" />
+  <link rel="stylesheet" href="css/history.css" />
+  <link rel="stylesheet" href="css/settings.css" />
+</head>
+<body>
+  <div class="hist settings-layout">
+    <aside class="hist-aside" aria-label="Settings">
+      <div class="hist-brand">
+        <img class="hist-brand-mark" src="assets/qubrain.svg" alt="" width="28" height="28" />
+        <span class="hist-brand-name">Settings</span>
+      </div>
+      <nav class="hist-navs" aria-label="Settings sections">
+        <button type="button" class="hist-nav is-active" data-settings-nav="general" aria-current="page">General</button>
+        <button type="button" class="hist-nav" data-settings-nav="privacy">Privacy &amp; security</button>
+      </nav>
+    </aside>
+
+    <main class="settings-main">
+      <section class="settings-panel" data-settings-panel="general" aria-labelledby="settings-general-title">
+        <div class="settings-heading">
+          <h1 id="settings-general-title">General</h1>
+          <p>Choose how Omni Browser looks and searches.</p>
+        </div>
+
+        <section class="settings-group" aria-labelledby="settings-appearance-title">
+          <h2 id="settings-appearance-title">Appearance</h2>
+          <p class="settings-description">Set the browser theme.</p>
+          <div class="settings-card settings-options" id="settings-appearance">
+            <label class="settings-option"><span>System default</span><input type="radio" name="appearance" value="system" /></label>
+            <label class="settings-option"><span>Dark</span><input type="radio" name="appearance" value="dark" /></label>
+            <label class="settings-option"><span>Light</span><input type="radio" name="appearance" value="light" /></label>
+          </div>
+        </section>
+
+        <section class="settings-group" aria-labelledby="settings-search-title">
+          <h2 id="settings-search-title">Search engine</h2>
+          <p class="settings-description">Used for searches from the address bar and new tab.</p>
+          <div class="settings-card settings-field">
+            <label for="settings-search-engine">Default search engine</label>
+            <select id="settings-search-engine">
+              <option value="google">Google</option>
+              <option value="brave">Brave</option>
+              <option value="duckduckgo">DuckDuckGo</option>
+              <option value="qwant">Qwant</option>
+              <option value="bing">Bing</option>
+              <option value="startpage">Startpage</option>
+              <option value="ecosia">Ecosia</option>
+            </select>
+          </div>
+        </section>
+      </section>
+
+      <section class="settings-panel" data-settings-panel="privacy" aria-labelledby="settings-privacy-title" hidden>
+        <div class="settings-heading">
+          <h1 id="settings-privacy-title">Privacy &amp; security</h1>
+          <p>Control protection against ads and trackers.</p>
+        </div>
+        <section class="settings-group" aria-labelledby="settings-shields-title">
+          <h2 id="settings-shields-title">Shields</h2>
+          <div class="settings-card settings-options">
+            <label class="settings-option settings-toggle-row">
+              <span><strong>Block ads and trackers</strong><small>Use the built-in filter lists on websites.</small></span>
+              <input id="settings-adblock-enabled" type="checkbox" />
+            </label>
+            <label class="settings-option settings-toggle-row">
+              <span><strong>Aggressive blocking</strong><small>Apply additional filters for stronger protection.</small></span>
+              <input id="settings-adblock-aggressive" type="checkbox" />
+            </label>
+          </div>
+        </section>
+      </section>
+      <p class="settings-status" id="settings-status" role="status" aria-live="polite"></p>
+    </main>
+  </div>
+  <script src="js/bridge.js"></script>
+  <script src="js/lib/theme.js"></script>
+  <script>if (window.OmniTheme) OmniTheme.boot();</script>
+  <script src="js/settings.js"></script>
+</body>
+</html>

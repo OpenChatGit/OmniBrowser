@@ -103,6 +103,27 @@ bool IsTrustedUiContentBrowser(OmniHandler* owner,
   return PathUnderUiRoot(frame->GetURL().ToString());
 }
 
+bool IsTrustedSettingsContentBrowser(OmniHandler* owner,
+                                     CefRefPtr<CefBrowser> browser) {
+  if (!IsTrustedUiContentBrowser(owner, browser)) {
+    return false;
+  }
+  const std::string actual =
+      NormalizeFileUrlKey(browser->GetMainFrame()->GetURL().ToString());
+  std::error_code ec;
+  const auto expected = std::filesystem::weakly_canonical(
+      std::filesystem::path(utf8::Widen(paths::UiRootDir())) /
+          L"settings.html",
+      ec);
+  if (ec) {
+    return false;
+  }
+  std::string expected_key = utf8::Narrow(expected.wstring());
+  std::transform(expected_key.begin(), expected_key.end(), expected_key.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+  return actual == expected_key;
+}
+
 bool ApiAccessAllowed(const ApiContext& ctx) {
   if (!ctx.owner || !ctx.browser) {
     return false;
@@ -115,6 +136,11 @@ bool ApiAccessAllowed(const ApiContext& ctx) {
     return true;
   }
   if (ctx.owner->IsContentBrowser(ctx.browser)) {
+    if (IsTrustedSettingsContentBrowser(ctx.owner, ctx.browser) &&
+        (ctx.method == "browser.adblock.get" ||
+         ctx.method == "browser.adblock.set")) {
+      return true;
+    }
     if (IsTrustedUiContentBrowser(ctx.owner, ctx.browser) &&
         IsTrustedUiAllowedMethod(ctx.method)) {
       return true;

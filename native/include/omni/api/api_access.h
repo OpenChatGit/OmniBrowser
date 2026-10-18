@@ -11,4 +11,8 @@ bool ApiAccessAllowed(const ApiContext& ctx);
 bool IsTrustedUiContentBrowser(OmniHandler* owner,
                                CefRefPtr<CefBrowser> browser);
 
+/** Content browser showing the bundled settings.html page. */
+bool IsTrustedSettingsContentBrowser(OmniHandler* owner,
+                                     CefRefPtr<CefBrowser> browser);
+
 }  // namespace omni

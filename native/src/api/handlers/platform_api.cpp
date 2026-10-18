@@ -1,6 +1,7 @@
 #include "omni/api/register_apis.h"
 
 #include "omni/api/api_dispatcher.h"
+#include "omni/api/api_access.h"
 #include "omni/appearance.h"
 #include "omni/omni_handler.h"
 #include "omni/plugin_registry.h"
@@ -60,8 +61,9 @@ void RegisterPlatformApis() {
   api.Register(
       "settings.set",
       [](const ApiContext& ctx, const Json& params, ApiResponder& responder) {
-        if (!IsShellOrOverlay(ctx)) {
-          responder.Failure(403, "settings.set requires shell or overlay");
+        if (!IsShellOrOverlay(ctx) &&
+            !IsTrustedSettingsContentBrowser(ctx.owner, ctx.browser)) {
+          responder.Failure(403, "settings.set requires shell, overlay, or settings page");
           return;
         }
         if (params.contains("settings") && params["settings"].is_object()) {
@@ -80,6 +82,11 @@ void RegisterPlatformApis() {
         const bool ok = settings::Set(key, params["value"]);
         if (ok && key == "appearance") {
           ApplyChromeAppearance();
+        }
+        if (ok && key == "omni.searchEngine") {
+          ctx.owner->EmitBrowserEvent(Json{{"type", "settings.changed"},
+                                           {"key", key},
+                                           {"value", params["value"]}});
         }
         responder.Success(Json{{"ok", ok}, {"key", key}}.dump());
       },
